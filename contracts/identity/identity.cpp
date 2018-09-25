@@ -53,6 +53,7 @@ namespace identity {
 
         using identity_base::identity_base;
 
+        // 设置信任
          void settrust( const account_name trustor, ///< the account authorizing the trust
                         const account_name trusting, ///< the account receiving the trust
                         const uint8_t      trust = 0 )/// 0 to remove, -1 to mark untrusted, 1 to mark trusted

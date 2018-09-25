@@ -108,6 +108,7 @@ wavm_runtime::wavm_runtime() {
 wavm_runtime::~wavm_runtime() {
 }
 
+// wasm虚拟机编译code，形成可使用的instance
 std::unique_ptr<wasm_instantiated_module_interface> wavm_runtime::instantiate_module(const char* code_bytes, size_t code_size, std::vector<uint8_t> initial_memory) {
    std::unique_ptr<Module> module = std::make_unique<Module>();
    try {

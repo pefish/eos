@@ -88,7 +88,7 @@ namespace eosiosystem {
    void system_contract::buyrambytes( account_name payer, account_name receiver, uint32_t bytes ) {
       auto itr = _rammarket.find(S(4,RAMCORE));
       auto tmp = *itr;
-      auto eosout = tmp.convert( asset(bytes,S(0,RAM)), CORE_SYMBOL );
+      auto eosout = tmp.convert( asset(bytes,S(0,RAM)), CORE_SYMBOL );  // 按照ram市场价计算出要购买x bytes ram需要多少eos
 
       buyram( payer, receiver, eosout );
    }
@@ -108,7 +108,7 @@ namespace eosiosystem {
       eosio_assert( quant.amount > 0, "must purchase a positive amount" );
 
       auto fee = quant;
-      fee.amount = ( fee.amount + 199 ) / 200; /// .5% fee (round up)
+      fee.amount = ( fee.amount + 199 ) / 200; /// .5% fee (round up)  买得越多，手续费就越接近于 0.5%
       // fee.amount cannot be 0 since that is only possible if quant.amount is 0 which is not allowed by the assert above.
       // If quant.amount == 1, then fee.amount == 1,
       // otherwise if quant.amount > 1, then 0 < fee.amount < quant.amount.
@@ -116,17 +116,19 @@ namespace eosiosystem {
       quant_after_fee.amount -= fee.amount;
       // quant_after_fee.amount should be > 0 if quant.amount > 1.
       // If quant.amount == 1, then quant_after_fee.amount == 0 and the next inline transfer will fail causing the buyram action to fail.
-
+      // 购买ram的eos转给eosio.ram账户
       INLINE_ACTION_SENDER(eosio::token, transfer)( N(eosio.token), {payer,N(active)},
          { payer, N(eosio.ram), quant_after_fee, std::string("buy ram") } );
 
       if( fee.amount > 0 ) {
+         // 购买ram的手续费转给eosio.ramfee账户
          INLINE_ACTION_SENDER(eosio::token, transfer)( N(eosio.token), {payer,N(active)},
                                                        { payer, N(eosio.ramfee), fee, std::string("ram fee") } );
       }
 
       int64_t bytes_out;
 
+      // 根据ram市场价计算能获得多少bytes的ram
       const auto& market = _rammarket.get(S(4,RAMCORE), "ram market does not exist");
       _rammarket.modify( market, 0, [&]( auto& es ) {
           bytes_out = es.convert( quant_after_fee,  S(0,RAM) ).amount;
@@ -134,9 +136,10 @@ namespace eosiosystem {
 
       eosio_assert( bytes_out > 0, "must reserve a positive amount" );
 
-      _gstate.total_ram_bytes_reserved += uint64_t(bytes_out);
-      _gstate.total_ram_stake          += quant_after_fee.amount;
+      _gstate.total_ram_bytes_reserved += uint64_t(bytes_out);  // 总的已经发出去的ram
+      _gstate.total_ram_stake          += quant_after_fee.amount;  // 总的已购买ram的eos数量
 
+      // 更新用户ram余额
       user_resources_table  userres( _self, receiver );
       auto res_itr = userres.find( receiver );
       if( res_itr ==  userres.end() ) {
@@ -149,6 +152,7 @@ namespace eosiosystem {
                res.ram_bytes += bytes_out;
             });
       }
+      // 设置pending的资源limit。资源limit都有生效周期
       set_resource_limits( res_itr->owner, res_itr->ram_bytes, res_itr->net_weight.amount, res_itr->cpu_weight.amount );
    }
 
@@ -219,10 +223,11 @@ namespace eosiosystem {
 
       account_name source_stake_from = from;
       if ( transfer ) {
-         from = receiver;
+         from = receiver; // 如果是transfer，则相当于receiver给receiver抵押资源
       }
 
       // update stake delegated from "from" to "receiver"
+       // 更新资源抵押表
       {
          del_bandwidth_table     del_tbl( _self, from);
          auto itr = del_tbl.find( receiver );
@@ -248,6 +253,7 @@ namespace eosiosystem {
       } // itr can be invalid, should go out of scope
 
       // update totals of "receiver"
+       // 更新接收者的用户资源表
       {
          user_resources_table   totals_tbl( _self, receiver );
          auto tot_itr = totals_tbl.find( receiver );
@@ -279,24 +285,24 @@ namespace eosiosystem {
          auto req = refunds_tbl.find( from );
 
          //create/update/delete refund
-         auto net_balance = stake_net_delta;
+         auto net_balance = stake_net_delta; // 抵押的改变量，可正可负，正表示抵押，负表示反抵押
          auto cpu_balance = stake_cpu_delta;
          bool need_deferred_trx = false;
 
 
          // net and cpu are same sign by assertions in delegatebw and undelegatebw
          // redundant assertion also at start of changebw to protect against misuse of changebw
-         bool is_undelegating = (net_balance.amount + cpu_balance.amount ) < 0;
-         bool is_delegating_to_self = (!transfer && from == receiver);
+         bool is_undelegating = (net_balance.amount + cpu_balance.amount ) < 0;  // 是否是反抵押
+         bool is_delegating_to_self = (!transfer && from == receiver);  // 是否是抵押给自己
 
          if( is_delegating_to_self || is_undelegating ) {
-            if ( req != refunds_tbl.end() ) { //need to update refund
+            if ( req != refunds_tbl.end() ) { // 如果存在正在赎回的eos
                refunds_tbl.modify( req, 0, [&]( refund_request& r ) {
-                  if ( net_balance < asset(0) || cpu_balance < asset(0) ) {
+                  if ( net_balance < asset(0) || cpu_balance < asset(0) ) { // 反抵押
                      r.request_time = now();
                   }
-                  r.net_amount -= net_balance;
-                  if ( r.net_amount < asset(0) ) {
+                  r.net_amount -= net_balance; // 如果是抵押给自己，优先使用正在赎回的eos
+                  if ( r.net_amount < asset(0) ) { // 如果正在赎回的不够，则使用余额
                      net_balance = -r.net_amount;
                      r.net_amount = asset(0);
                   } else {
@@ -314,22 +320,22 @@ namespace eosiosystem {
                eosio_assert( asset(0) <= req->net_amount, "negative net refund amount" ); //should never happen
                eosio_assert( asset(0) <= req->cpu_amount, "negative cpu refund amount" ); //should never happen
 
-               if ( req->net_amount == asset(0) && req->cpu_amount == asset(0) ) {
+               if ( req->net_amount == asset(0) && req->cpu_amount == asset(0) ) { // 如果发现正在赎回的表中存在赎回金额为0的记录，则删掉它
                   refunds_tbl.erase( req );
-                  need_deferred_trx = false;
+                  need_deferred_trx = false;  // 并标记没有需要refund的eos
                } else {
                   need_deferred_trx = true;
                }
 
-            } else if ( net_balance < asset(0) || cpu_balance < asset(0) ) { //need to create refund
+            } else if ( net_balance < asset(0) || cpu_balance < asset(0) ) { // 反抵押
                refunds_tbl.emplace( from, [&]( refund_request& r ) {
                   r.owner = from;
                   if ( net_balance < asset(0) ) {
-                     r.net_amount = -net_balance;
+                     r.net_amount = -net_balance; // 正在赎回的net抵押
                      net_balance = asset(0);
                   } // else r.net_amount = 0 by default constructor
                   if ( cpu_balance < asset(0) ) {
-                     r.cpu_amount = -cpu_balance;
+                     r.cpu_amount = -cpu_balance;  // 正在赎回的cpu抵押
                      cpu_balance = asset(0);
                   } // else r.cpu_amount = 0 by default constructor
                   r.request_time = now();
@@ -338,24 +344,24 @@ namespace eosiosystem {
             } // else stake increase requested with no existing row in refunds_tbl -> nothing to do with refunds_tbl
          } /// end if is_delegating_to_self || is_undelegating
 
-         if ( need_deferred_trx ) {
+         if ( need_deferred_trx ) {  // 如果发现有正在赎回的，则这里帮忙发送一个带有延时的refund的交易，不用用户自己refund了
             eosio::transaction out;
             out.actions.emplace_back( permission_level{ from, N(active) }, _self, N(refund), from );
-            out.delay_sec = refund_delay;
-            cancel_deferred( from ); // TODO: Remove this line when replacing deferred trxs is fixed
+            out.delay_sec = refund_delay;  // 延时3天
+            cancel_deferred( from ); // TODO: Remove this line when replacing deferred trxs is fixed  // 取消 from 账户的所有延迟的交易
             out.send( from, from, true );
          } else {
             cancel_deferred( from );
          }
 
          auto transfer_amount = net_balance + cpu_balance;
-         if ( asset(0) < transfer_amount ) {
+         if ( asset(0) < transfer_amount ) {  // 减掉余额中的eos
             INLINE_ACTION_SENDER(eosio::token, transfer)( N(eosio.token), {source_stake_from, N(active)},
                { source_stake_from, N(eosio.stake), asset(transfer_amount), std::string("stake bandwidth") } );
          }
       }
 
-      // update voting power
+      // 更新自己的可投票信息
       {
          asset total_update = stake_net_delta + stake_cpu_delta;
          auto from_voter = _voters.find(from);
@@ -374,7 +380,7 @@ namespace eosiosystem {
             validate_b1_vesting( from_voter->staked );
          }
 
-         if( from_voter->producers.size() || from_voter->proxy ) {
+         if( from_voter->producers.size() || from_voter->proxy ) { // 如果已经选择了生产者或者代理，则投票给他们
             update_votes( from, from_voter->proxy, from_voter->producers, false );
          }
       }
@@ -404,7 +410,7 @@ namespace eosiosystem {
       changebw( from, receiver, -unstake_net_quantity, -unstake_cpu_quantity, false);
    } // undelegatebw
 
-
+   // 赎回抵押的eos。反抵押的eos 3天后才能赎回, 赎回操作是有地方触发的，有时无需用户手动赎回
    void system_contract::refund( const account_name owner ) {
       require_auth( owner );
 

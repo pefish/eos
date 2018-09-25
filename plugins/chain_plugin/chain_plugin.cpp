@@ -925,6 +925,7 @@ void chain_plugin::handle_guard_exception(const chain::guard_exception& e) const
    app().quit();
 }
 
+// 所有api
 namespace chain_apis {
 
 const string read_only::KEYi64 = "i64";

@@ -184,13 +184,14 @@ namespace eosio { namespace chain {
       init( 0 );
    }
 
+   // 执行交易
    void transaction_context::exec() {
       EOS_ASSERT( is_initialized, transaction_exception, "must first initialize" );
 
-      if( apply_context_free ) {
+      if( apply_context_free ) { // 执行每个action
          for( const auto& act : trx.context_free_actions ) {
             trace->action_traces.emplace_back();
-            dispatch_action( trace->action_traces.back(), act, true );
+            dispatch_action( trace->action_traces.back(), act, true ); // 通过 dispatch_action 执行
          }
       }
 
@@ -400,13 +401,14 @@ namespace eosio { namespace chain {
       return std::make_tuple(account_net_limit, account_cpu_limit, greylisted);
    }
 
+   // 开启新的应用上下文执行action
    void transaction_context::dispatch_action( action_trace& trace, const action& a, account_name receiver, bool context_free, uint32_t recurse_depth ) {
-      apply_context  acontext( control, *this, a, recurse_depth );
+      apply_context  acontext( control, *this, a, recurse_depth );  // 初始化新的应用上下文，所以每次执行除了数据库持久化，其他变量都是暂时的
       acontext.context_free = context_free;
-      acontext.receiver     = receiver;
+      acontext.receiver     = receiver;  // 默认情况下，action的账户就是receiver
 
       try {
-         acontext.exec();
+         acontext.exec();  // 执行合约的action
       } catch( ... ) {
          trace = move(acontext.trace);
          throw;

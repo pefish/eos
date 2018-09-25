@@ -979,7 +979,7 @@ producer_plugin_impl::start_block_result producer_plugin_impl::start_block(bool 
          size_t orig_pending_txn_size = _pending_incoming_transactions.size();
 
          if (!persisted_by_expiry.empty() || _pending_block_mode == pending_block_mode::producing) {
-            auto unapplied_trxs = chain.get_unapplied_transactions();
+            auto unapplied_trxs = chain.get_unapplied_transactions(); // 开始处理被回滚的块
 
             if (!persisted_by_expiry.empty()) {
                for (auto itr = unapplied_trxs.begin(); itr != unapplied_trxs.end(); ++itr) {

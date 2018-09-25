@@ -47,6 +47,7 @@ namespace eosio {
       set_blockchain_parameters_packed( buf, ds.tellp() );
    }
 
+   // 获取区块链配置信息
    void get_blockchain_parameters(eosio::blockchain_parameters& params) {
       char buf[sizeof(eosio::blockchain_parameters)];
       size_t size = get_blockchain_parameters_packed( buf, sizeof(buf) );

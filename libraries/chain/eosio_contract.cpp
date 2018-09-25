@@ -2,6 +2,7 @@
  *  @file
  *  @copyright defined in eos/LICENSE.txt
  */
+// 定义了一些前置处理器
 #include <eosio/chain/eosio_contract.hpp>
 #include <eosio/chain/contract_table_objects.hpp>
 
@@ -67,6 +68,7 @@ void validate_authority_precondition( const apply_context& context, const author
 /**
  *  This method is called assuming precondition_system_newaccount succeeds a
  */
+// 创建账户的action开始调用的地方
 void apply_eosio_newaccount(apply_context& context) {
    auto create = context.act.data_as<newaccount>();
    try {

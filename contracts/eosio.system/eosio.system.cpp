@@ -24,6 +24,7 @@ namespace eosiosystem {
       if( itr == _rammarket.end() ) {
          auto system_token_supply   = eosio::token(N(eosio.token)).get_supply(eosio::symbol_type(system_token_symbol).name()).amount;
          if( system_token_supply > 0 ) {
+            // 初始化bancor配置(是双重bancor)
             itr = _rammarket.emplace( _self, [&]( auto& m ) {
                m.supply.amount = 100000000000000ll;
                m.supply.symbol = S(4,RAMCORE);
@@ -51,8 +52,9 @@ namespace eosiosystem {
       //eosio_exit(0);
    }
 
+   // 设置ram的最大发行量
    void system_contract::setram( uint64_t max_ram_size ) {
-      require_auth( _self );
+      require_auth( _self ); // 只有eosio账户才能设置ram
 
       eosio_assert( _gstate.max_ram_size < max_ram_size, "ram may only be increased" ); /// decreasing ram might result market maker issues
       eosio_assert( max_ram_size < 1024ll*1024*1024*1024*1024, "ram size is unrealistic" );
@@ -65,6 +67,7 @@ namespace eosiosystem {
        *  Increase or decrease the amount of ram for sale based upon the change in max
        *  ram size.
        */
+       // 向bancor系统中更改ram的余额(增发或者销毁), 将直接影响ram价格
       _rammarket.modify( itr, 0, [&]( auto& m ) {
          m.base.balance.amount += delta;
       });
@@ -73,6 +76,7 @@ namespace eosiosystem {
       _global.set( _gstate, _self );
    }
 
+   // 修改区块链设置
    void system_contract::setparams( const eosio::blockchain_parameters& params ) {
       require_auth( N(eosio) );
       (eosio::blockchain_parameters&)(_gstate) = params;
@@ -80,11 +84,13 @@ namespace eosiosystem {
       set_blockchain_parameters( params );
    }
 
+   // 设置特权账户
    void system_contract::setpriv( account_name account, uint8_t ispriv ) {
       require_auth( _self );
       set_privileged( account, ispriv );
    }
 
+   // 移除生产者
    void system_contract::rmvproducer( account_name producer ) {
       require_auth( _self );
       auto prod = _producers.find( producer );
@@ -94,6 +100,7 @@ namespace eosiosystem {
          });
    }
 
+   // 账户拍卖
    void system_contract::bidname( account_name bidder, account_name newname, asset bid ) {
       require_auth( bidder );
       eosio_assert( eosio::name_suffix(newname) == newname, "you can only bid on top-level suffix" );
@@ -104,13 +111,14 @@ namespace eosiosystem {
       eosio_assert( bid.symbol == asset().symbol, "asset must be system token" );
       eosio_assert( bid.amount > 0, "insufficient bid" );
 
+      // 押金转给eosio.names账户
       INLINE_ACTION_SENDER(eosio::token, transfer)( N(eosio.token), {bidder,N(active)},
                                                     { bidder, N(eosio.names), bid, std::string("bid name ")+(name{newname}).to_string()  } );
 
       name_bid_table bids(_self,_self);
       print( name{bidder}, " bid ", bid, " on ", name{newname}, "\n" );
       auto current = bids.find( newname );
-      if( current == bids.end() ) {
+      if( current == bids.end() ) {  // 如果这个账户没有人投标过
          bids.emplace( bidder, [&]( auto& b ) {
             b.newname = newname;
             b.high_bidder = bidder;
@@ -119,9 +127,10 @@ namespace eosiosystem {
          });
       } else {
          eosio_assert( current->high_bid > 0, "this auction has already closed" );
-         eosio_assert( bid.amount - current->high_bid > (current->high_bid / 10), "must increase bid by 10%" );
-         eosio_assert( current->high_bidder != bidder, "account is already highest bidder" );
+         eosio_assert( bid.amount - current->high_bid > (current->high_bid / 10), "must increase bid by 10%" ); // 新的价格必须高于上次投标价格的10%
+         eosio_assert( current->high_bidder != bidder, "account is already highest bidder" );  // 当前出家最高的不能已经是自己
 
+         // 有人投标更高价格，则之前的最高投标者重新获得他之前的押金
          INLINE_ACTION_SENDER(eosio::token, transfer)( N(eosio.token), {N(eosio.names),N(active)},
                                                        { N(eosio.names), current->high_bidder, asset(current->high_bid),
                                                        std::string("refund bid on name ")+(name{newname}).to_string()  } );
@@ -143,6 +152,7 @@ namespace eosiosystem {
     *  who can create accounts with the creator's name as a suffix.
     *
     */
+    // 账户被创建之后才调用这个。可以在这里申领竞拍账户。成功竞拍到账户A后，用户也自动获取了以.A为后缀的所有账户
    void native::newaccount( account_name     creator,
                             account_name     newact
                             /*  no need to parse authorities
@@ -164,7 +174,7 @@ namespace eosiosystem {
                auto current = bids.find( newact );
                eosio_assert( current != bids.end(), "no active bid for name" );
                eosio_assert( current->high_bidder == creator, "only highest bidder can claim" );
-               eosio_assert( current->high_bid < 0, "auction for name is not closed yet" );
+               eosio_assert( current->high_bid < 0, "auction for name is not closed yet" ); // 检查这个域名竞拍是否已经结束。结束了 high_bid 会是 -high_bid
                bids.erase( current );
             } else {
                eosio_assert( creator == suffix, "only suffix may create this account" );
@@ -178,7 +188,7 @@ namespace eosiosystem {
         res.owner = newact;
       });
 
-      set_resource_limits( newact, 0, 0, 0 );
+      set_resource_limits( newact, 0, 0, 0 );  // 将这个账户的可用资源都设置为0
    }
 
 } /// eosio.system

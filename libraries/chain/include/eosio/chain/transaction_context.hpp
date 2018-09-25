@@ -51,7 +51,7 @@ namespace eosio { namespace chain {
 
          void dispatch_action( action_trace& trace, const action& a, account_name receiver, bool context_free = false, uint32_t recurse_depth = 0 );
          inline void dispatch_action( action_trace& trace, const action& a, bool context_free = false ) {
-            dispatch_action(trace, a, a.account, context_free);
+            dispatch_action(trace, a, a.account, context_free);  // 默认情况下，action的账户就是receiver
          };
          void schedule_transaction();
          void record_transaction( const transaction_id_type& id, fc::time_point_sec expire );

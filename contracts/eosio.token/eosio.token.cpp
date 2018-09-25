@@ -7,6 +7,7 @@
 
 namespace eosio {
 
+// 创建代币
 void token::create( account_name issuer,
                     asset        maximum_supply )
 {
@@ -28,7 +29,7 @@ void token::create( account_name issuer,
     });
 }
 
-
+// 发行代币
 void token::issue( account_name to, asset quantity, string memo )
 {
     auto sym = quantity.symbol;
@@ -41,7 +42,7 @@ void token::issue( account_name to, asset quantity, string memo )
     eosio_assert( existing != statstable.end(), "token with symbol does not exist, create token before issue" );
     const auto& st = *existing;
 
-    require_auth( st.issuer );
+    require_auth( st.issuer );  // 只有创建代币时指定的发行人才能发行代币
     eosio_assert( quantity.is_valid(), "invalid quantity" );
     eosio_assert( quantity.amount > 0, "must issue positive quantity" );
 
@@ -59,6 +60,7 @@ void token::issue( account_name to, asset quantity, string memo )
     }
 }
 
+// 代币转账
 void token::transfer( account_name from,
                       account_name to,
                       asset        quantity,
@@ -84,6 +86,7 @@ void token::transfer( account_name from,
     add_balance( to, quantity, from );
 }
 
+// 减余额（不暴露）
 void token::sub_balance( account_name owner, asset value ) {
    accounts from_acnts( _self, owner );
 
@@ -100,6 +103,7 @@ void token::sub_balance( account_name owner, asset value ) {
    }
 }
 
+// 加余额（不暴露）
 void token::add_balance( account_name owner, asset value, account_name ram_payer )
 {
    accounts to_acnts( _self, owner );

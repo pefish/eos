@@ -54,8 +54,8 @@ namespace eosio { namespace chain {
                                                                                     const shared_string& code,
                                                                                     transaction_context& trx_context )
       {
-         auto it = instantiation_cache.find(code_id);
-         if(it == instantiation_cache.end()) {
+         auto it = instantiation_cache.find(code_id); // 寻找智能合约的code缓存
+         if(it == instantiation_cache.end()) { // 如果不存在缓存
             auto timer_pause = fc::make_scoped_exit([&](){
                trx_context.resume_billing_timer();
             });
@@ -84,6 +84,7 @@ namespace eosio { namespace chain {
             } catch(const IR::ValidationException& e) {
                EOS_ASSERT(false, wasm_serialization_error, e.message.c_str());
             }
+            // wasm初始化运行时模块，并添加缓存
             it = instantiation_cache.emplace(code_id, runtime_interface->instantiate_module((const char*)bytes.data(), bytes.size(), parse_initial_memory(module))).first;
          }
          return it->second;

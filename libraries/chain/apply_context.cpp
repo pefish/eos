@@ -29,6 +29,7 @@ static inline void print_debug(account_name receiver, const action_trace& ar) {
    }
 }
 
+// 执行action
 action_trace apply_context::exec_one()
 {
    auto start = fc::time_point::now();
@@ -94,22 +95,24 @@ action_trace apply_context::exec_one()
 void apply_context::exec()
 {
    _notified.push_back(receiver);
-   trace = exec_one();
+   trace = exec_one(); // 这一次执行，receiver是action的账户。这次执行会把require_recipient方法执行掉，通知器会被加入账户，下面就会通知他们。内联交易也会加到 _inline_actions 中
    for( uint32_t i = 1; i < _notified.size(); ++i ) {
       receiver = _notified[i];
-      trace.inline_traces.emplace_back( exec_one() );
+      trace.inline_traces.emplace_back( exec_one() );  // 其他通知器中的账户，receiver是通知器中的账户，且结果属于inline_traces
    }
 
-   if( _cfa_inline_actions.size() > 0 || _inline_actions.size() > 0 ) {
+   if( _cfa_inline_actions.size() > 0 || _inline_actions.size() > 0 ) {  // 要求内联交易不能太多
       EOS_ASSERT( recurse_depth < control.get_global_properties().configuration.max_inline_action_depth,
-                  transaction_exception, "inline action recursion depth reached" );
+                  transaction_exception, "inline action recursion depth reached" ); // recurse_depth 默认就是0，后面执行内联交易会递增
    }
 
+   // 使用交易上下文执行所有内联交易，dispatch_action会初始化应用上下文，所以内联交易都是独立执行的
    for( const auto& inline_action : _cfa_inline_actions ) {
       trace.inline_traces.emplace_back();
       trx_context.dispatch_action( trace.inline_traces.back(), inline_action, inline_action.account, true, recurse_depth + 1 );
    }
 
+   // 使用交易上下文执行所有内联交易，dispatch_action会初始化应用上下文，所以内联交易都是独立执行的
    for( const auto& inline_action : _inline_actions ) {
       trace.inline_traces.emplace_back();
       trx_context.dispatch_action( trace.inline_traces.back(), inline_action, inline_action.account, false, recurse_depth + 1 );
@@ -158,6 +161,7 @@ bool apply_context::has_recipient( account_name code )const {
    return false;
 }
 
+// 向 _notified 中增加一个账户
 void apply_context::require_recipient( account_name recipient ) {
    if( !has_recipient(recipient) ) {
       _notified.push_back(recipient);
@@ -180,6 +184,7 @@ void apply_context::require_recipient( account_name recipient ) {
  *   ask the user for permission to take certain actions rather than making it implicit. This way users
  *   can better understand the security risk.
  */
+ // 执行内联交易  eosio.token合约中的SEND_INLINE_ACTION调用的就是这里
 void apply_context::execute_inline( action&& a ) {
    auto* code = control.db().find<account_object, by_name>(a.account);
    EOS_ASSERT( code != nullptr, action_validate_exception,
@@ -305,6 +310,7 @@ void apply_context::schedule_deferred_transaction( const uint128_t& sender_id, a
 }
 
 bool apply_context::cancel_deferred_transaction( const uint128_t& sender_id, account_name sender ) {
+   // 从pending的交易的表中移除此交易
    auto& generated_transaction_idx = db.get_mutable_index<generated_transaction_multi_index>();
    const auto* gto = db.find<generated_transaction_object,by_sender_id>(boost::make_tuple(sender, sender_id));
    if ( gto ) {

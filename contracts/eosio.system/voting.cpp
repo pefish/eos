@@ -70,14 +70,16 @@ namespace eosiosystem {
       });
    }
 
+   // 找出最新的得票数前21的生产者，并更新到产块系统中
    void system_contract::update_elected_producers( block_timestamp block_time ) {
-      _gstate.last_producer_schedule_update = block_time;
+      _gstate.last_producer_schedule_update = block_time;  // 上次出块的时间
 
       auto idx = _producers.get_index<N(prototalvote)>();
 
       std::vector< std::pair<eosio::producer_key,uint16_t> > top_producers;
       top_producers.reserve(21);
 
+      // 选出得票权重最高的前21个生产者
       for ( auto it = idx.cbegin(); it != idx.cend() && top_producers.size() < 21 && 0 < it->total_votes && it->active(); ++it ) {
          top_producers.emplace_back( std::pair<eosio::producer_key,uint16_t>({{it->owner, it->producer_key}, it->location}) );
       }
@@ -86,7 +88,7 @@ namespace eosiosystem {
          return;
       }
 
-      /// sort by producer name
+      // 按照生产者名字排序
       std::sort( top_producers.begin(), top_producers.end() );
 
       std::vector<eosio::producer_key> producers;
@@ -97,6 +99,7 @@ namespace eosiosystem {
 
       bytes packed_schedule = pack(producers);
 
+      // 更新21个生产者
       if( set_proposed_producers( packed_schedule.data(),  packed_schedule.size() ) >= 0 ) {
          _gstate.last_producer_schedule_size = static_cast<decltype(_gstate.last_producer_schedule_size)>( top_producers.size() );
       }
@@ -131,13 +134,14 @@ namespace eosiosystem {
    void system_contract::update_votes( const account_name voter_name, const account_name proxy, const std::vector<account_name>& producers, bool voting ) {
       //validate input
       if ( proxy ) {
+         // 投票给代理，让代理代投给生产者
          eosio_assert( producers.size() == 0, "cannot vote for producers and proxy at same time" );
          eosio_assert( voter_name != proxy, "cannot proxy to self" );
          require_recipient( proxy );
       } else {
-         eosio_assert( producers.size() <= 30, "attempt to vote for too many producers" );
+         eosio_assert( producers.size() <= 30, "attempt to vote for too many producers" ); // 投票的对象不能超过30个
          for( size_t i = 1; i < producers.size(); ++i ) {
-            eosio_assert( producers[i-1] < producers[i], "producer votes must be unique and sorted" );
+            eosio_assert( producers[i-1] < producers[i], "producer votes must be unique and sorted" ); // 投票的生产者不能存在一样的，且要按顺序
          }
       }
 
@@ -150,28 +154,29 @@ namespace eosiosystem {
        * after total_activated_stake hits threshold, we can use last_vote_weight to determine that this is
        * their first vote and should consider their stake activated.
        */
-      if( voter->last_vote_weight <= 0.0 ) {
-         _gstate.total_activated_stake += voter->staked;
+      if( voter->last_vote_weight <= 0.0 ) { // 如果上次投票权重为0，即是第一次投票
+         _gstate.total_activated_stake += voter->staked;  // 更新已激活的抵押（启动时必须一定数量抵押被激活）总数
          if( _gstate.total_activated_stake >= min_activated_stake && _gstate.thresh_activated_stake_time == 0 ) {
-            _gstate.thresh_activated_stake_time = current_time();
+            _gstate.thresh_activated_stake_time = current_time();  // 标记网络激活时间
          }
       }
 
-      auto new_vote_weight = stake2vote( voter->staked );
-      if( voter->is_proxy ) {
+      auto new_vote_weight = stake2vote( voter->staked );  // 可能比上次增加，也可能比上次减少
+      if( voter->is_proxy ) { // 如果投票者是代理，则加上别人投给代理的所有份额
          new_vote_weight += voter->proxied_vote_weight;
       }
 
       boost::container::flat_map<account_name, pair<double, bool /*new*/> > producer_deltas;
       if ( voter->last_vote_weight > 0 ) {
-         if( voter->proxy ) {
+         if( voter->proxy ) {  // 如果投票者之前有一个代理
             auto old_proxy = _voters.find( voter->proxy );
             eosio_assert( old_proxy != _voters.end(), "old proxy not found" ); //data corruption
             _voters.modify( old_proxy, 0, [&]( auto& vp ) {
-                  vp.proxied_vote_weight -= voter->last_vote_weight;
+                  vp.proxied_vote_weight -= voter->last_vote_weight; // 代理要减掉投票者的份额
                });
-            propagate_weight_change( *old_proxy );
+            propagate_weight_change( *old_proxy );  // 将代理的投票给生产者
          } else {
+            // 如果之前没有代理，则之前投给的生产者要还回来
             for( const auto& p : voter->producers ) {
                auto& d = producer_deltas[p];
                d.first -= voter->last_vote_weight;
@@ -180,26 +185,27 @@ namespace eosiosystem {
          }
       }
 
-      if( proxy ) {
+      if( proxy ) {  // 如果是投给代理
          auto new_proxy = _voters.find( proxy );
          eosio_assert( new_proxy != _voters.end(), "invalid proxy specified" ); //if ( !voting ) { data corruption } else { wrong vote }
          eosio_assert( !voting || new_proxy->is_proxy, "proxy not found" );
          if ( new_vote_weight >= 0 ) {
             _voters.modify( new_proxy, 0, [&]( auto& vp ) {
-                  vp.proxied_vote_weight += new_vote_weight;
+                  vp.proxied_vote_weight += new_vote_weight; // 新代理加上投票者的权重
                });
-            propagate_weight_change( *new_proxy );
+            propagate_weight_change( *new_proxy );  // 清算新代理
          }
       } else {
          if( new_vote_weight >= 0 ) {
             for( const auto& p : producers ) {
                auto& d = producer_deltas[p];
-               d.first += new_vote_weight;
+               d.first += new_vote_weight;  // 新的生产者加上投票者的权重
                d.second = true;
             }
          }
       }
 
+      // 结算之前的生产者以及之后的生产者
       for( const auto& pd : producer_deltas ) {
          auto pitr = _producers.find( pd.first );
          if( pitr != _producers.end() ) {
@@ -209,7 +215,7 @@ namespace eosiosystem {
                if ( p.total_votes < 0 ) { // floating point arithmetics can give small negative numbers
                   p.total_votes = 0;
                }
-               _gstate.total_producer_vote_weight += pd.second.first;
+               _gstate.total_producer_vote_weight += pd.second.first;  // 更新总的生产者权重
                //eosio_assert( p.total_votes >= 0, "something bad happened" );
             });
          } else {
@@ -217,6 +223,7 @@ namespace eosiosystem {
          }
       }
 
+      // 更新投票者信息
       _voters.modify( voter, 0, [&]( auto& av ) {
          av.last_vote_weight = new_vote_weight;
          av.producers = producers;
@@ -239,10 +246,12 @@ namespace eosiosystem {
       auto pitr = _voters.find(proxy);
       if ( pitr != _voters.end() ) {
          eosio_assert( isproxy != pitr->is_proxy, "action has no effect" );
+         // 正在使用代理的账户不能注册成为代理
          eosio_assert( !isproxy || !pitr->proxy, "account that uses a proxy is not allowed to become a proxy" );
          _voters.modify( pitr, 0, [&]( auto& p ) {
                p.is_proxy = isproxy;
             });
+         // 也触发投票给生产者加上
          propagate_weight_change( *pitr );
       } else {
          _voters.emplace( proxy, [&]( auto& p ) {
@@ -252,6 +261,7 @@ namespace eosiosystem {
       }
    }
 
+   // 将投票者的票数给生产者，如果是代理，则往上处理代理的票数
    void system_contract::propagate_weight_change( const voter_info& voter ) {
       eosio_assert( voter.proxy == 0 || !voter.is_proxy, "account registered as a proxy is not allowed to use a proxy" );
       double new_weight = stake2vote( voter.staked );

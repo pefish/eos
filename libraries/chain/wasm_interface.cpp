@@ -54,7 +54,7 @@ namespace eosio { namespace chain {
 	 }
 
    void wasm_interface::apply( const digest_type& code_id, const shared_string& code, apply_context& context ) {
-      my->get_instantiated_module(code_id, code, context.trx_context)->apply(context);
+      my->get_instantiated_module(code_id, code, context.trx_context)->apply(context);  // 调用合约的apply方法, 这就是智能合约中有一个apply函数的原因
    }
 
    wasm_instantiated_module_interface::~wasm_instantiated_module_interface() {}
@@ -134,12 +134,13 @@ class privileged_api : public context_aware_api {
        * @param net_weight - the weight for determining share of network capacity
        * @param cpu_weight - the weight for determining share of compute capacity
        */
+       // 更新账户的可用资源
       void set_resource_limits( account_name account, int64_t ram_bytes, int64_t net_weight, int64_t cpu_weight) {
          EOS_ASSERT(ram_bytes >= -1, wasm_execution_error, "invalid value for ram resource limit expected [-1,INT64_MAX]");
          EOS_ASSERT(net_weight >= -1, wasm_execution_error, "invalid value for net resource weight expected [-1,INT64_MAX]");
          EOS_ASSERT(cpu_weight >= -1, wasm_execution_error, "invalid value for cpu resource weight expected [-1,INT64_MAX]");
          if( context.control.get_mutable_resource_limits_manager().set_account_limits(account, ram_bytes, net_weight, cpu_weight) ) {
-            context.trx_context.validate_ram_usage.insert( account );
+            context.trx_context.validate_ram_usage.insert( account ); // 每笔交易都会验证validate_ram_usage中的所有账户
          }
       }
 
@@ -147,6 +148,7 @@ class privileged_api : public context_aware_api {
          context.control.get_resource_limits_manager().get_account_limits( account, ram_bytes, net_weight, cpu_weight);
       }
 
+      // 更新产块的21个生产者
       int64_t set_proposed_producers( array_ptr<char> packed_producer_schedule, size_t datalen) {
          datastream<const char*> ds( packed_producer_schedule, datalen );
          vector<producer_key> producers;
@@ -163,6 +165,7 @@ class privileged_api : public context_aware_api {
          return context.control.set_proposed_producers( std::move(producers) );
       }
 
+      // 获取区块链配置信息
       uint32_t get_blockchain_parameters_packed( array_ptr<char> packed_blockchain_parameters, size_t buffer_size) {
          auto& gpo = context.control.get_global_properties();
 
@@ -192,6 +195,7 @@ class privileged_api : public context_aware_api {
          return context.db.get<account_object, by_name>( n ).privileged;
       }
 
+      // 设置成为特权账户
       void set_privileged( account_name n, bool is_priv ) {
          const auto& a = context.db.get<account_object, by_name>( n );
          context.db.modify( a, [&]( auto& ma ){
@@ -1304,6 +1308,7 @@ class transaction_api : public context_aware_api {
    public:
       using context_aware_api::context_aware_api;
 
+      // 发送内联交易。比如内联转账
       void send_inline( array_ptr<char> data, size_t data_len ) {
          //TODO: Why is this limit even needed? And why is it not consistently checked on actions in input or deferred transactions
          EOS_ASSERT( data_len < context.control.get_global_properties().configuration.max_inline_action_size, inline_action_too_big,

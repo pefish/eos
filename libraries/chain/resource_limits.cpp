@@ -189,7 +189,7 @@ int64_t resource_limits_manager::get_account_ram_usage( const account_name& name
    return _db.get<resource_usage_object,by_owner>( name ).ram_usage;
 }
 
-
+// 更新账户的可用资源
 bool resource_limits_manager::set_account_limits( const account_name& account, int64_t ram_bytes, int64_t net_weight, int64_t cpu_weight) {
    //const auto& usage = _db.get<resource_usage_object,by_owner>( account );
    /*
@@ -198,8 +198,10 @@ bool resource_limits_manager::set_account_limits( const account_name& account, i
     * the actual state at the next appropriate boundary.
     */
    auto find_or_create_pending_limits = [&]() -> const resource_limits_object& {
+      // 找出resource_limits_object表中某账户的pending的资源limit设置
       const auto* pending_limits = _db.find<resource_limits_object, by_owner>( boost::make_tuple(true, account) );
       if (pending_limits == nullptr) {
+         // 没有找到就插入一个
          const auto& limits = _db.get<resource_limits_object, by_owner>( boost::make_tuple(false, account));
          return _db.create<resource_limits_object>([&](resource_limits_object& pending_limits){
             pending_limits.owner = limits.owner;
@@ -216,7 +218,7 @@ bool resource_limits_manager::set_account_limits( const account_name& account, i
    // update the users weights directly
    auto& limits = find_or_create_pending_limits();
 
-   bool decreased_limit = false;
+   bool decreased_limit = false;  // 是否是ram limit减少
 
    if( ram_bytes >= 0 ) {
 
@@ -231,6 +233,7 @@ bool resource_limits_manager::set_account_limits( const account_name& account, i
       */
    }
 
+   // 更新此账户的pending资源设置
    _db.modify( limits, [&]( resource_limits_object& pending_limits ){
       pending_limits.ram_bytes = ram_bytes;
       pending_limits.net_weight = net_weight;

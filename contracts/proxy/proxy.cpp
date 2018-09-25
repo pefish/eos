@@ -94,10 +94,10 @@ extern "C" {
       if( code == N(eosio) && action == N(onerror) ) {
          apply_onerror( receiver, onerror::from_current_action() );
       } else if( code == N(eosio.token) ) {
-         if( action == N(transfer) ) {
+         if( action == N(transfer) ) { // 如果是转账EOS
             apply_transfer(receiver, code, unpack_action_data<eosio::token::transfer_args>());
          }
-      } else if( code == receiver ) {
+      } else if( code == receiver ) { // 如果是发给合约账户的交易
          if( action == N(setowner) ) {
             apply_setowner(receiver, unpack_action_data<set_owner>());
          }

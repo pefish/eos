@@ -115,7 +115,7 @@ struct controller_impl {
     *  are removed from this list if they are re-applied in other blocks. Producers
     *  can query this list when scheduling new transactions into blocks.
     */
-   map<digest_type, transaction_metadata_ptr>     unapplied_transactions;
+   map<digest_type, transaction_metadata_ptr>     unapplied_transactions; // 存放所有被回滚的交易，等待后面的块包含他们
 
    void pop_block() {
       auto prev = fork_db.get_block( head->header.previous );
@@ -135,7 +135,7 @@ struct controller_impl {
 
    }
 
-
+   // 设置前置处理器
    void set_apply_handler( account_name receiver, account_name contract, action_name action, apply_handler v ) {
       apply_handlers[receiver][make_pair(contract,action)] = v;
    }
@@ -158,10 +158,11 @@ struct controller_impl {
     read_mode( cfg.read_mode )
    {
 
+// 设置前置处理器的宏定义
 #define SET_APP_HANDLER( receiver, contract, action) \
    set_apply_handler( #receiver, #contract, #action, &BOOST_PP_CAT(apply_, BOOST_PP_CAT(contract, BOOST_PP_CAT(_,action) ) ) )
 
-   SET_APP_HANDLER( eosio, eosio, newaccount );
+   SET_APP_HANDLER( eosio, eosio, newaccount ); // 设置 eosio账户， eosio scope，newaccount action前置处理器, 处理器为apply_eosio_newaccount
    SET_APP_HANDLER( eosio, eosio, setcode );
    SET_APP_HANDLER( eosio, eosio, setabi );
    SET_APP_HANDLER( eosio, eosio, updateauth );
@@ -1587,6 +1588,7 @@ void controller::pop_block() {
    my->pop_block();
 }
 
+// 更新21个生产者
 int64_t controller::set_proposed_producers( vector<producer_key> producers ) {
    const auto& gpo = get_global_properties();
    auto cur_block_num = head_block_num() + 1;
@@ -1631,6 +1633,7 @@ int64_t controller::set_proposed_producers( vector<producer_key> producers ) {
    return version;
 }
 
+// 返回当前的正在轮班的生产者们
 const producer_schedule_type&    controller::active_producers()const {
    if ( !(my->pending) )
       return  my->head->active_schedule;
@@ -1706,6 +1709,7 @@ validation_mode controller::get_validation_mode()const {
    return my->conf.block_validation_mode;
 }
 
+// 查找某账户某scope某action的前置处理器, 比如eosio的newaccount动作具有前置处理器
 const apply_handler* controller::find_apply_handler( account_name receiver, account_name scope, action_name act ) const
 {
    auto native_handler_scope = my->apply_handlers.find( receiver );
