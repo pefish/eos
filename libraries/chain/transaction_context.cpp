@@ -272,7 +272,7 @@ namespace eosio { namespace chain {
                EOS_THROW( block_net_usage_exceeded,
                           "not enough space left in block: ${net_usage} > ${net_limit}",
                           ("net_usage", net_usage)("net_limit", eager_net_limit) );
-            }  else if (net_limit_due_to_greylist) {
+            }  else if (net_limit_due_to_greylist) { // 是灰名单账户
                EOS_THROW( greylist_net_usage_exceeded,
                           "net usage of transaction is too high: ${net_usage} > ${net_limit}",
                           ("net_usage", net_usage)("net_limit", eager_net_limit) );
@@ -377,6 +377,7 @@ namespace eosio { namespace chain {
       return static_cast<uint32_t>(billed_cpu_time_us);
    }
 
+   // 获取账户的最大可使用资源
    std::tuple<int64_t, int64_t, bool> transaction_context::max_bandwidth_billed_accounts_can_pay( bool force_elastic_limits )const {
       // Assumes rl.update_account_usage( bill_to_accounts, block_timestamp_type(control.pending_block_time()).slot ) was already called prior
 

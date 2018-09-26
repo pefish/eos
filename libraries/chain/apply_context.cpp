@@ -38,24 +38,24 @@ action_trace apply_context::exec_one()
    try {
       const auto& a = control.get_account( receiver );
       privileged = a.privileged;
-      auto native = control.find_apply_handler( receiver, act.account, act.name );
+      auto native = control.find_apply_handler( receiver, act.account, act.name ); // 查找有没有前置处理器
       if( native ) {
-         if( trx_context.can_subjectively_fail && control.is_producing_block()) {
-            control.check_contract_list( receiver );
-            control.check_action_list( act.account, act.name );
+         if( trx_context.can_subjectively_fail && control.is_producing_block()) { // 如果本节点正在生产块
+            control.check_contract_list( receiver ); // 则检查合约白名单以及黑名单
+            control.check_action_list( act.account, act.name ); // 则检查action黑白名单
          }
-         (*native)( *this );
+         (*native)( *this ); // 调用前置处理器
       }
 
       if( a.code.size() > 0
           && !(act.account == config::system_account_name && act.name == N( setcode ) &&
-               receiver == config::system_account_name)) {
+               receiver == config::system_account_name)) { // 如果receiver部署了合约且action不是setcode(即部署合约)
          if( trx_context.can_subjectively_fail && control.is_producing_block()) {
             control.check_contract_list( receiver );
             control.check_action_list( act.account, act.name );
          }
          try {
-            control.get_wasm_interface().apply( a.code_version, a.code, *this );
+            control.get_wasm_interface().apply( a.code_version, a.code, *this );  // 使用虚拟机执行合约action
          } catch( const wasm_exit& ) {}
       }
 

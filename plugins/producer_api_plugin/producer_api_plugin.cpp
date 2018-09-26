@@ -66,25 +66,25 @@ void producer_api_plugin::plugin_startup() {
    auto& producer = app().get_plugin<producer_plugin>();
 
    app().get_plugin<http_plugin>().add_api({
-       CALL(producer, producer, pause,
+       CALL(producer, producer, pause,  // /v1/producer/pause  暂停生产者
             INVOKE_V_V(producer, pause), 201),
-       CALL(producer, producer, resume,
+       CALL(producer, producer, resume,  // /v1/producer/resume  继续生产者
             INVOKE_V_V(producer, resume), 201),
-       CALL(producer, producer, paused,
+       CALL(producer, producer, paused,  // /v1/producer/paused  是否已暂停
             INVOKE_R_V(producer, paused), 201),
-       CALL(producer, producer, get_runtime_options,
+       CALL(producer, producer, get_runtime_options,  // /v1/producer/get_runtime_options  获取运行时配置
             INVOKE_R_V(producer, get_runtime_options), 201),
-       CALL(producer, producer, update_runtime_options,
+       CALL(producer, producer, update_runtime_options,  // /v1/producer/update_runtime_options  更新运行时配置
             INVOKE_V_R(producer, update_runtime_options, producer_plugin::runtime_options), 201),
-       CALL(producer, producer, add_greylist_accounts,
+       CALL(producer, producer, add_greylist_accounts,  // /v1/producer/add_greylist_accounts  添加账户灰名单。添加后不能使用net资源
             INVOKE_V_R(producer, add_greylist_accounts, producer_plugin::greylist_params), 201),
-       CALL(producer, producer, remove_greylist_accounts,
+       CALL(producer, producer, remove_greylist_accounts,  // /v1/producer/remove_greylist_accounts  移除账户灰名单
             INVOKE_V_R(producer, remove_greylist_accounts, producer_plugin::greylist_params), 201), 
-       CALL(producer, producer, get_greylist,
+       CALL(producer, producer, get_greylist,  // /v1/producer/get_greylist  查看所有灰名单
             INVOKE_R_V(producer, get_greylist), 201),                 
-       CALL(producer, producer, get_whitelist_blacklist,
+       CALL(producer, producer, get_whitelist_blacklist,  // /v1/producer/get_whitelist_blacklist  查看所有白名单黑名单。包括 actor黑白名单 contract黑白名单 action黑名单 key(公钥)黑名单
             INVOKE_R_V(producer, get_whitelist_blacklist), 201),
-       CALL(producer, producer, set_whitelist_blacklist, 
+       CALL(producer, producer, set_whitelist_blacklist,  // /v1/producer/set_whitelist_blacklist  设置所有白名单黑名单
             INVOKE_V_R(producer, set_whitelist_blacklist, producer_plugin::whitelist_blacklist), 201),   
    });
 }

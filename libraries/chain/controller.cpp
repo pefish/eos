@@ -1720,6 +1720,7 @@ const apply_handler* controller::find_apply_handler( account_name receiver, acco
    }
    return nullptr;
 }
+// 获取wasm实例(可以使用apply方法调用合约)
 wasm_interface& controller::get_wasm_interface() {
    return my->wasmif;
 }

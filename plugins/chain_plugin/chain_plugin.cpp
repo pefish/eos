@@ -925,7 +925,7 @@ void chain_plugin::handle_guard_exception(const chain::guard_exception& e) const
    app().quit();
 }
 
-// 所有api
+// 所有chain api
 namespace chain_apis {
 
 const string read_only::KEYi64 = "i64";
@@ -1389,6 +1389,7 @@ void read_write::push_block(const read_write::push_block_params& params, next_fu
    } CATCH_AND_CALL(next);
 }
 
+// /v1/chain/push_transaction的入口
 void read_write::push_transaction(const read_write::push_transaction_params& params, next_function<read_write::push_transaction_results> next) {
 
    try {
@@ -1396,7 +1397,7 @@ void read_write::push_transaction(const read_write::push_transaction_params& par
       auto resolver = make_resolver(this, abi_serializer_max_time);
       try {
          abi_serializer::from_variant(params, *pretty_input, resolver, abi_serializer_max_time);
-      } EOS_RETHROW_EXCEPTIONS(chain::packed_transaction_type_exception, "Invalid packed transaction")
+      } EOS_RETHROW_EXCEPTIONS(chain::packed_transaction_type_exception, "Invalid packed transaction");
 
       app().get_method<incoming::methods::transaction_async>()(pretty_input, true, [this, next](const fc::static_variant<fc::exception_ptr, transaction_trace_ptr>& result) -> void{
          if (result.contains<fc::exception_ptr>()) {

@@ -2,7 +2,7 @@
  *  @file
  *  @copyright defined in eosio/LICENSE.txt
  */
-#include <appbase/application.hpp>
+#include <appbase/application.hpp>  // [1 nodeos启动] 实例化 _app 实例，使用 app() 访问
 
 #include <eosio/chain_plugin/chain_plugin.hpp>
 #include <eosio/http_plugin/http_plugin.hpp>
@@ -51,6 +51,7 @@ void configure_logging(const bfs::path& config_path)
 
 } // namespace detail
 
+// [11 nodeos启动] 循环检测配置变动，实现实时加载配置的变化
 void logging_conf_loop()
 {
    std::shared_ptr<boost::asio::signal_set> sighup_set(new boost::asio::signal_set(app().get_io_service(), SIGHUP));
@@ -68,6 +69,7 @@ void logging_conf_loop()
    });
 }
 
+// [10 nodeos启动] 初始化日志系统
 void initialize_logging()
 {
    auto config_path = app().get_logging_conf();
@@ -93,13 +95,13 @@ enum return_codes {
 int main(int argc, char** argv)
 {
    try {
-      app().set_version(eosio::nodeos::config::version);
-      app().register_plugin<history_plugin>();
+      app().set_version(eosio::nodeos::config::version); // [6 nodeos启动] 设置应用版本(外部传进来的环境变量)
+      app().register_plugin<history_plugin>(); // 注册 history_plugin 插件
 
       auto root = fc::app_path();
-      app().set_default_data_dir(root / "eosio/nodeos/data" );
-      app().set_default_config_dir(root / "eosio/nodeos/config" );
-      if(!app().initialize<chain_plugin, http_plugin, net_plugin, producer_plugin>(argc, argv))
+      app().set_default_data_dir(root / "eosio/nodeos/data" ); // 设置默认data目录
+      app().set_default_config_dir(root / "eosio/nodeos/config" ); // 设置默认配置目录
+      if(!app().initialize<chain_plugin, http_plugin, net_plugin, producer_plugin>(argc, argv)) // 初始化app对象. 默认启动插件 chain_plugin, http_plugin, net_plugin, producer_plugin
          return INITIALIZE_FAIL;
       initialize_logging();
       ilog("nodeos version ${ver}", ("ver", app().version_string()));
