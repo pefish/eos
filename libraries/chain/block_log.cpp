@@ -321,6 +321,7 @@ namespace eosio { namespace chain {
       }
    } // construct_index
 
+        // 修复块日志并备份原日志
    fc::path block_log::repair_log( const fc::path& data_dir, uint32_t truncate_at_block ) {
       ilog("Recovering Block Log...");
       EOS_ASSERT( fc::is_directory(data_dir) && fc::is_regular_file(data_dir / "blocks.log"), block_log_not_found,
@@ -341,7 +342,7 @@ namespace eosio { namespace chain {
                  "Cannot move existing blocks directory to already existing directory '${new_blocks_dir}'",
                  ("new_blocks_dir", backup_dir) );
 
-      fc::rename( blocks_dir, backup_dir );
+      fc::rename( blocks_dir, backup_dir ); // 备份blocks目录
       ilog( "Moved existing blocks directory to backup location: '${new_blocks_dir}'", ("new_blocks_dir", backup_dir) );
 
       fc::create_directories(blocks_dir);

@@ -14,7 +14,7 @@ namespace eosio {
    using namespace chain;
    using boost::signals2::scoped_connection;
 
-   static appbase::abstract_plugin& _history_plugin = app().register_plugin<history_plugin>();
+   static appbase::abstract_plugin& _history_plugin = app().register_plugin<history_plugin>(); // 注册插件
 
 
    struct account_history_object : public chainbase::object<account_history_object_type, account_history_object>  {
@@ -308,20 +308,21 @@ namespace eosio {
             ;
    }
 
+   // [1 插件启动] 初始化插件
    void history_plugin::plugin_initialize(const variables_map& options) {
       try {
          if( options.count( "filter-on" )) {
             auto fo = options.at( "filter-on" ).as<vector<string>>();
             for( auto& s : fo ) {
-               if( s == "*" ) {
+               if( s == "*" ) { // 不过滤。可以撑爆内存
                   my->bypass_filter = true;
                   wlog( "--filter-on * enabled. This can fill shared_mem, causing nodeos to stop." );
                   break;
                }
                std::vector<std::string> v;
-               boost::split( v, s, boost::is_any_of( ":" ));
-               EOS_ASSERT( v.size() == 3, fc::invalid_arg_exception, "Invalid value ${s} for --filter-on", ("s", s));
-               filter_entry fe{v[0], v[1], v[2]};
+               boost::split( v, s, boost::is_any_of( ":" )); // 将s按照:分割
+               EOS_ASSERT( v.size() == 3, fc::invalid_arg_exception, "Invalid value ${s} for --filter-on", ("s", s)); // 要求必须两个冒号分割3个东西
+               filter_entry fe{v[0], v[1], v[2]}; // receiver、action、actor
                EOS_ASSERT( fe.receiver.value, fc::invalid_arg_exception,
                            "Invalid value ${s} for --filter-on", ("s", s));
                my->filter_on.insert( fe );
@@ -340,7 +341,7 @@ namespace eosio {
             }
          }
 
-         my->chain_plug = app().find_plugin<chain_plugin>();
+         my->chain_plug = app().find_plugin<chain_plugin>(); // 找到并赋值chain_plugin
          EOS_ASSERT( my->chain_plug, chain::missing_chain_plugin_exception, ""  );
          auto& chain = my->chain_plug->chain();
 

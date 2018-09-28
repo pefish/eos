@@ -7,6 +7,6 @@
 
 namespace eosio { namespace chain {
 
-const string genesis_state::eosio_root_key = "${EOSIO_ROOT_KEY}";
+const string genesis_state::eosio_root_key = "${EOSIO_ROOT_KEY}";  // 赋值初始公钥。固定的 EOS6MRyAjQq8ud7hVNYcfnVPJqcVpscN5So8BhtHuGYqET5GDW5CV
 
 } } // namespace eosio::chain

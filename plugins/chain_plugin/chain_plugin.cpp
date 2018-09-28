@@ -316,7 +316,7 @@ void chain_plugin::plugin_initialize(const variables_map& options) {
 
    try {
       try {
-         genesis_state gs; // Check if EOSIO_ROOT_KEY is bad
+         genesis_state gs; // 实例化结构体。调用构造函数，构造函数中获取初始公钥
       } catch ( const fc::exception& ) {
          elog( "EOSIO_ROOT_KEY ('${root_key}') is invalid. Recompile with a valid public key.",
                ("root_key", genesis_state::eosio_root_key));
@@ -325,12 +325,13 @@ void chain_plugin::plugin_initialize(const variables_map& options) {
 
       my->chain_config = controller::config();
 
+      // 加载黑白名单配置
       LOAD_VALUE_SET( options, "actor-whitelist", my->chain_config->actor_whitelist );
       LOAD_VALUE_SET( options, "actor-blacklist", my->chain_config->actor_blacklist );
       LOAD_VALUE_SET( options, "contract-whitelist", my->chain_config->contract_whitelist );
       LOAD_VALUE_SET( options, "contract-blacklist", my->chain_config->contract_blacklist );
 
-      if( options.count( "action-blacklist" )) {
+      if( options.count( "action-blacklist" )) {  // code::action
          const std::vector<std::string>& acts = options["action-blacklist"].as<std::vector<std::string>>();
          auto& list = my->chain_config->action_blacklist;
          for( const auto& a : acts ) {
@@ -457,7 +458,7 @@ void chain_plugin::plugin_initialize(const variables_map& options) {
          fc::remove_all( my->blocks_dir );
       } else if( options.at( "hard-replay-blockchain" ).as<bool>()) {
          ilog( "Hard replay requested: deleting state database" );
-         fc::remove_all( my->chain_config->state_dir );
+         fc::remove_all( my->chain_config->state_dir );  // 删除状态数据库,启动后会自动replay
          auto backup_dir = block_log::repair_log( my->blocks_dir, options.at( "truncate-at-block" ).as<uint32_t>());
          if( fc::exists( backup_dir / config::reversible_blocks_dir_name ) ||
              options.at( "fix-reversible-blocks" ).as<bool>()) {
@@ -465,7 +466,7 @@ void chain_plugin::plugin_initialize(const variables_map& options) {
             if( !recover_reversible_blocks( backup_dir / config::reversible_blocks_dir_name,
                                             my->chain_config->reversible_cache_size,
                                             my->chain_config->blocks_dir / config::reversible_blocks_dir_name,
-                                            options.at( "truncate-at-block" ).as<uint32_t>())) {
+                                            options.at( "truncate-at-block" ).as<uint32_t>())) { // 如果没有动可回滚块
                ilog( "Reversible blocks database was not corrupted. Copying from backup to blocks directory." );
                fc::copy( backup_dir / config::reversible_blocks_dir_name,
                          my->chain_config->blocks_dir / config::reversible_blocks_dir_name );
@@ -493,7 +494,7 @@ void chain_plugin::plugin_initialize(const variables_map& options) {
                                          options.at( "truncate-at-block" ).as<uint32_t>())) {
             ilog( "Reversible blocks database verified to not be corrupted. Now exiting..." );
          } else {
-            ilog( "Exiting after fixing reversible blocks database..." );
+            ilog( "Exiting after fixing reversible blocks database..." );  // 恢复成功
          }
          EOS_THROW( fixed_reversible_db_exception, "fixed corrupted reversible blocks database" );
       } else if( options.at( "truncate-at-block" ).as<uint32_t>() > 0 ) {
@@ -501,7 +502,7 @@ void chain_plugin::plugin_initialize(const variables_map& options) {
       } else if( options.count("import-reversible-blocks") ) {
          auto reversible_blocks_file = options.at("import-reversible-blocks").as<bfs::path>();
          ilog("Importing reversible blocks from '${file}'", ("file", reversible_blocks_file.generic_string()) );
-         fc::remove_all( my->chain_config->blocks_dir/config::reversible_blocks_dir_name );
+         fc::remove_all( my->chain_config->blocks_dir/config::reversible_blocks_dir_name ); // 删除可回滚的块
 
          import_reversible_blocks( my->chain_config->blocks_dir/config::reversible_blocks_dir_name,
                                    my->chain_config->reversible_cache_size, reversible_blocks_file );
@@ -689,6 +690,7 @@ bool chain_plugin::block_is_on_preferred_chain(const block_id_type& block_id) {
    return b && b->id() == block_id;
 }
 
+// 修复可回滚的块且备份原来的
 bool chain_plugin::recover_reversible_blocks( const fc::path& db_dir, uint32_t cache_size,
                                               optional<fc::path> new_db_dir, uint32_t truncate_at_block ) {
    try {
@@ -794,6 +796,7 @@ bool chain_plugin::recover_reversible_blocks( const fc::path& db_dir, uint32_t c
    return true;
 }
 
+// 导入可回滚的块
 bool chain_plugin::import_reversible_blocks( const fc::path& reversible_dir,
                                              uint32_t cache_size,
                                              const fc::path& reversible_blocks_file ) {
@@ -843,6 +846,7 @@ bool chain_plugin::import_reversible_blocks( const fc::path& reversible_dir,
    return true;
 }
 
+// 导出可回滚的块到指定目录
 bool chain_plugin::export_reversible_blocks( const fc::path& reversible_dir,
                                              const fc::path& reversible_blocks_file ) {
    chainbase::database  reversible( reversible_dir, database::read_only, 0, true );

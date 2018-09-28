@@ -130,7 +130,7 @@ class read_only {
  */
 class history_plugin : public plugin<history_plugin> {
    public:
-      APPBASE_PLUGIN_REQUIRES((chain_plugin))
+      APPBASE_PLUGIN_REQUIRES((chain_plugin))  // 注册依赖插件
 
       history_plugin();
       virtual ~history_plugin();
