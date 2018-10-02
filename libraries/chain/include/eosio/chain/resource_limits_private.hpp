@@ -128,6 +128,7 @@ namespace eosio { namespace chain { namespace resource_limits {
     * Every account that authorizes a transaction is billed for the full size of that transaction. This object
     * tracks the average usage of that account.
     */
+    // 存放账户的可用资源
    struct resource_limits_object : public chainbase::object<resource_limits_object_type, resource_limits_object> {
 
       OBJECT_CTOR(resource_limits_object)
@@ -136,7 +137,7 @@ namespace eosio { namespace chain { namespace resource_limits {
       account_name owner;
       bool pending = false;
 
-      int64_t net_weight = -1;
+      int64_t net_weight = -1; // 默认资源是无限的
       int64_t cpu_weight = -1;
       int64_t ram_bytes = -1;
 

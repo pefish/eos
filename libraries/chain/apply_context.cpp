@@ -106,13 +106,13 @@ void apply_context::exec()
                   transaction_exception, "inline action recursion depth reached" ); // recurse_depth 默认就是0，后面执行内联交易会递增
    }
 
-   // 使用交易上下文执行所有内联交易，dispatch_action会初始化应用上下文，所以内联交易都是独立执行的
+   // 使用交易上下文执行所有内联交易，dispatch_action会初始化应用上下文，所以内联交易都是独立执行的，也就是内联交易都是一笔不同的交易，具有不同的txid
    for( const auto& inline_action : _cfa_inline_actions ) {
       trace.inline_traces.emplace_back();
       trx_context.dispatch_action( trace.inline_traces.back(), inline_action, inline_action.account, true, recurse_depth + 1 );
    }
 
-   // 使用交易上下文执行所有内联交易，dispatch_action会初始化应用上下文，所以内联交易都是独立执行的
+   // 使用交易上下文执行所有内联交易，dispatch_action会初始化应用上下文，所以内联交易都是独立执行的，也就是内联交易都是一笔不同的交易，具有不同的txid
    for( const auto& inline_action : _inline_actions ) {
       trace.inline_traces.emplace_back();
       trx_context.dispatch_action( trace.inline_traces.back(), inline_action, inline_action.account, false, recurse_depth + 1 );

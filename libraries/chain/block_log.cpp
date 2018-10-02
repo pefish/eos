@@ -200,14 +200,15 @@ namespace eosio { namespace chain {
       my->index_stream.flush();
    }
 
+   // 将区块log重置到创世状态
    uint64_t block_log::reset_to_genesis( const genesis_state& gs, const signed_block_ptr& genesis_block ) {
       if( my->block_stream.is_open() )
          my->block_stream.close();
       if( my->index_stream.is_open() )
          my->index_stream.close();
 
-      fc::remove_all( my->block_file );
-      fc::remove_all( my->index_file );
+      fc::remove_all( my->block_file ); // 删除block文件
+      fc::remove_all( my->index_file ); // 删除区块索引
 
       my->block_stream.open(my->block_file.generic_string().c_str(), LOG_WRITE);
       my->index_stream.open(my->index_file.generic_string().c_str(), LOG_WRITE);
@@ -275,6 +276,7 @@ namespace eosio { namespace chain {
       return pos;
    }
 
+   // 获取 block_log 当前指示位置, 也就是 my->block_stream 的当前位置
    signed_block_ptr block_log::read_head()const {
       my->check_block_read();
 

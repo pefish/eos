@@ -46,10 +46,12 @@ void resource_limits_manager::add_indices() {
 }
 
 void resource_limits_manager::initialize_database() {
+    // 创建 resource_limits_config_object 表
    const auto& config = _db.create<resource_limits_config_object>([](resource_limits_config_object& config){
       // see default settings in the declaration
    });
 
+   // 创建 resource_limits_state_object 表
    _db.create<resource_limits_state_object>([&config](resource_limits_state_object& state){
       // see default settings in the declaration
 
@@ -59,7 +61,9 @@ void resource_limits_manager::initialize_database() {
    });
 }
 
+// 创建账户资源记录, 无限资源
 void resource_limits_manager::initialize_account(const account_name& account) {
+    // 创建的账户默认资源无限
    _db.create<resource_limits_object>([&]( resource_limits_object& bl ) {
       bl.owner = account;
    });
@@ -156,6 +160,7 @@ void resource_limits_manager::add_transaction_usage(const flat_set<account_name>
    EOS_ASSERT( state.pending_net_usage <= config.net_limit_parameters.max, block_resource_exhausted, "Block has insufficient net resources" );
 }
 
+// 添加 pending 的 ram 消耗
 void resource_limits_manager::add_pending_ram_usage( const account_name account, int64_t ram_delta ) {
    if (ram_delta == 0) {
       return;
@@ -173,6 +178,7 @@ void resource_limits_manager::add_pending_ram_usage( const account_name account,
    });
 }
 
+// 校验 已用ram 和 可用ram
 void resource_limits_manager::verify_account_ram_usage( const account_name account )const {
    int64_t ram_bytes; int64_t net_weight; int64_t cpu_weight;
    get_account_limits( account, ram_bytes, net_weight, cpu_weight );
@@ -243,6 +249,7 @@ bool resource_limits_manager::set_account_limits( const account_name& account, i
    return decreased_limit;
 }
 
+// 获取账户的可用资源
 void resource_limits_manager::get_account_limits( const account_name& account, int64_t& ram_bytes, int64_t& net_weight, int64_t& cpu_weight ) const {
    const auto* pending_buo = _db.find<resource_limits_object,by_owner>( boost::make_tuple(true, account) );
    if (pending_buo) {

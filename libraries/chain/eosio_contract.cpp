@@ -72,7 +72,7 @@ void validate_authority_precondition( const apply_context& context, const author
 void apply_eosio_newaccount(apply_context& context) {
    auto create = context.act.data_as<newaccount>();
    try {
-   context.require_authorization(create.creator);
+   context.require_authorization(create.creator); // 校验创建者权限
 //   context.require_write_lock( config::eosio_auth_scope );
    auto& authorization = context.control.get_mutable_authorization_manager();
 
@@ -83,21 +83,21 @@ void apply_eosio_newaccount(apply_context& context) {
 
    auto name_str = name(create.name).to_string();
 
-   EOS_ASSERT( !create.name.empty(), action_validate_exception, "account name cannot be empty" );
-   EOS_ASSERT( name_str.size() <= 12, action_validate_exception, "account names can only be 12 chars long" );
+   EOS_ASSERT( !create.name.empty(), action_validate_exception, "account name cannot be empty" ); // 要创建的账户名不能为空
+   EOS_ASSERT( name_str.size() <= 12, action_validate_exception, "account names can only be 12 chars long" ); // 要创建的账户名长度不能大于12位
 
    // Check if the creator is privileged
    const auto &creator = db.get<account_object, by_name>(create.creator);
    if( !creator.privileged ) {
       EOS_ASSERT( name_str.find( "eosio." ) != 0, action_validate_exception,
-                  "only privileged accounts can have names that start with 'eosio.'" );
-   }
+                  "only privileged accounts can have names that start with 'eosio.'" );  // 只有特权账户才能以 eosio. 开头
 
+   // 检查要创建的账户是否已经存在
    auto existing_account = db.find<account_object, by_name>(create.name);
    EOS_ASSERT(existing_account == nullptr, account_name_exists_exception,
               "Cannot create account named ${name}, as that name is already taken",
               ("name", create.name));
-
+    // 记录新账户到数据库
    const auto& new_account = db.create<account_object>([&](auto& a) {
       a.name = create.name;
       a.creation_date = context.control.pending_block_time();

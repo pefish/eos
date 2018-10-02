@@ -311,6 +311,7 @@ fc::time_point calculate_genesis_timestamp( string tstr ) {
    return genesis_timestamp;
 }
 
+// [1 启动chain_plugin] 初始化
 void chain_plugin::plugin_initialize(const variables_map& options) {
    ilog("initializing chain plugin");
 
@@ -574,7 +575,7 @@ void chain_plugin::plugin_initialize(const variables_map& options) {
 
       my->get_block_by_id_provider = app().get_method<methods::get_block_by_id>().register_provider(
             [this]( block_id_type id ) -> signed_block_ptr {
-               return my->chain->fetch_block_by_id( id );
+               return my->chain->fetch_block_by_id( id ); // my->chain是controller实例
             } );
 
       my->get_head_block_id_provider = app().get_method<methods::get_head_block_id>().register_provider( [this]() {
@@ -631,10 +632,11 @@ void chain_plugin::plugin_initialize(const variables_map& options) {
 
 }
 
+// [2 启动chain_plugin] 启动
 void chain_plugin::plugin_startup()
 { try {
    try {
-      my->chain->startup();
+      my->chain->startup(); // my->chain 是 controller 实例
    } catch (const database_guard_exception& e) {
       log_guard_exception(e);
       // make sure to properly close the db

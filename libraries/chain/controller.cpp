@@ -117,15 +117,17 @@ struct controller_impl {
     */
    map<digest_type, transaction_metadata_ptr>     unapplied_transactions; // 存放所有被回滚的交易，等待后面的块包含他们
 
+    // 回滚掉产生分叉的块, 使主链的head指向fork_db的分叉前的位置
    void pop_block() {
-      auto prev = fork_db.get_block( head->header.previous );
+      auto prev = fork_db.get_block( head->header.previous ); // 从 fork_db 中获取主链当前块的上一个块
       EOS_ASSERT( prev, block_validate_exception, "attempt to pop beyond last irreversible block" );
 
       if( const auto* b = reversible_blocks.find<reversible_block_object,by_num>(head->block_num) )
       {
-         reversible_blocks.remove( *b );
+         reversible_blocks.remove( *b ); // 移除掉分叉的块
       }
 
+      // 将分叉块中的交易重新安排为待确认交易
       if ( read_mode == db_read_mode::SPECULATIVE ) {
          for( const auto& t : head->trxs )
             unapplied_transactions[t->signed_id] = t;
@@ -245,6 +247,7 @@ struct controller_impl {
       emit( self.irreversible_block, s );
    }
 
+   // [5 启动chain_plugin] 初始化controller
    void init() {
 
       /**
@@ -253,19 +256,20 @@ struct controller_impl {
       *  in the database (whose head block state should be irreversible) or
       *  it would be the genesis state.
       */
-      if( !head ) {
+      if( !head ) { // 如果 fork_db.head 不存在, fork_db.head会在fork_database构造函数中初始化, 也就是 fork_db_dat 文件不存在
          initialize_fork_db(); // set head to genesis state
 
          auto end = blog.read_head();
-         if( end && end->block_num() > 1 ) {
+         if( end && end->block_num() > 1 ) { // 如果存在区块日志
             auto end_time = end->timestamp.to_time_point();
             replaying = true;
             replay_head_time = end_time;
             ilog( "existing block log, attempting to replay ${n} blocks", ("n",end->block_num()) );
 
+            // 因为存在 log，所以需要 replay log，重新建立索引
             auto start = fc::time_point::now();
             while( auto next = blog.read_block_by_num( head->block_num + 1 ) ) {
-               self.push_block( next, controller::block_status::irreversible );
+               self.push_block( next, controller::block_status::irreversible ); // 应用块(执行所有块中所有的交易)
                if( next->block_num() % 100 == 0 ) {
                   std::cerr << std::setw(10) << next->block_num() << " of " << end->block_num() <<"\r";
                }
@@ -275,8 +279,9 @@ struct controller_impl {
 
             // the irreverible log is played without undo sessions enabled, so we need to sync the
             // revision ordinal to the appropriate expected value here.
-            db.set_revision(head->block_num);
+            db.set_revision(head->block_num); // 设置回滚点
 
+             // 应用可回滚的块
             int rev = 0;
             while( auto obj = reversible_blocks.find<reversible_block_object,by_num>(head->block_num+1) ) {
                ++rev;
@@ -288,7 +293,7 @@ struct controller_impl {
             ilog( "replayed ${n} blocks in ${duration} seconds, ${mspb} ms/block",
                   ("n", head->block_num)("duration", (end-start).count()/1000000)
                   ("mspb", ((end-start).count()/1000.0)/head->block_num)        );
-            replaying = false;
+            replaying = false; // 重放结束
             replay_head_time.reset();
 
          } else if( !end ) {
@@ -317,6 +322,7 @@ struct controller_impl {
                "attempting to undo pending changes",
                ("db",db.revision())("head",head->block_num) );
       }
+      // 将数据库回滚到当前位置
       while( db.revision() > head->block_num ) {
          db.undo();
       }
@@ -330,6 +336,7 @@ struct controller_impl {
       reversible_blocks.flush();
    }
 
+   // [4 启动chain_plugin] 添加各个数据库的各种索引
    void add_indices() {
       reversible_blocks.add_index<reversible_block_index>();
 
@@ -369,6 +376,7 @@ struct controller_impl {
    /**
     *  Sets fork database head to the genesis state.
     */
+    // 设置 fork_db.head 为创世块
    void initialize_fork_db() {
       wlog( " Initializing new blockchain with genesis state                  " );
       producer_schedule_type initial_schedule{ 0, {{config::system_account_name, conf.genesis.initial_key}} };
@@ -384,14 +392,16 @@ struct controller_impl {
 
       head = std::make_shared<block_state>( genheader );
       head->block = std::make_shared<signed_block>(genheader.header);
-      fork_db.set( head );
-      db.set_revision( head->block_num );
+      fork_db.set( head ); // 设置 index
+      db.set_revision( head->block_num ); // 设置 undo stack
 
-      initialize_database();
+      initialize_database(); // 初始化一些数据库
    }
 
+   // 创建原生账户
    void create_native_account( account_name name, const authority& owner, const authority& active, bool is_privileged = false ) {
-      db.create<account_object>([&](auto& a) {
+      // 创建账户保存数据库
+       db.create<account_object>([&](auto& a) {
          a.name = name;
          a.creation_date = conf.genesis.initial_timestamp;
          a.privileged = is_privileged;
@@ -409,45 +419,52 @@ struct controller_impl {
       const auto& active_permission = authorization.create_permission(name, config::active_name, owner_permission.id,
                                                                       active, conf.genesis.initial_timestamp );
 
-      resource_limits.initialize_account(name);
+      resource_limits.initialize_account(name); // 初始化账户资源
 
+       // 计算消耗的ram
       int64_t ram_delta = config::overhead_per_account_ram_bytes;
       ram_delta += 2*config::billable_size_v<permission_object>;
       ram_delta += owner_permission.auth.get_billable_size();
       ram_delta += active_permission.auth.get_billable_size();
 
-      resource_limits.add_pending_ram_usage(name, ram_delta);
-      resource_limits.verify_account_ram_usage(name);
+      resource_limits.add_pending_ram_usage(name, ram_delta); // 记录pending的ram消费
+      resource_limits.verify_account_ram_usage(name); // 校验已用ram和可用ram
    }
 
+   // 初始化数据库
    void initialize_database() {
       // Initialize block summary index
       for (int i = 0; i < 0x10000; i++)
          db.create<block_summary_object>([&](block_summary_object&) {});
 
+      // 设置block_summary_object表第一行
       const auto& tapos_block_summary = db.get<block_summary_object>(1);
       db.modify( tapos_block_summary, [&]( auto& bs ) {
         bs.block_id = head->id;
       });
 
-      conf.genesis.initial_configuration.validate();
+      conf.genesis.initial_configuration.validate(); // 校验 genesis 文件
+       // 创建 global_property_object 表
       db.create<global_property_object>([&](auto& gpo ){
         gpo.configuration = conf.genesis.initial_configuration;
       });
+      // 创建 dynamic_global_property_object 表
       db.create<dynamic_global_property_object>([](auto&){});
 
+      // 初始化权限管家的数据库
       authorization.initialize_database();
+       // 初始化资源管家的数据库
       resource_limits.initialize_database();
 
       authority system_auth(conf.genesis.initial_key);
-      create_native_account( config::system_account_name, system_auth, system_auth, true );
+      create_native_account( config::system_account_name, system_auth, system_auth, true ); // 创建创世账户
 
-      auto empty_authority = authority(1, {}, {});
+      auto empty_authority = authority(1, {}, {}); // 空权限
       auto active_producers_authority = authority(1, {}, {});
-      active_producers_authority.accounts.push_back({{config::system_account_name, config::active_name}, 1});
+      active_producers_authority.accounts.push_back({{config::system_account_name, config::active_name}, 1}); // 多签名权限，由 eosio 账户控制
 
-      create_native_account( config::null_account_name, empty_authority, empty_authority );
-      create_native_account( config::producers_account_name, empty_authority, active_producers_authority );
+      create_native_account( config::null_account_name, empty_authority, empty_authority ); // 创建 eosio.null 账户
+      create_native_account( config::producers_account_name, empty_authority, active_producers_authority ); // 创建 eosio.prods 账户
       const auto& active_permission       = authorization.get_permission({config::producers_account_name, config::active_name});
       const auto& majority_permission     = authorization.create_permission( config::producers_account_name,
                                                                              config::majority_producers_permission_name,
@@ -1025,7 +1042,7 @@ struct controller_impl {
          EOS_ASSERT( s != controller::block_status::incomplete, block_validate_exception, "invalid block status for a completed block" );
          emit( self.pre_accepted_block, b );
          bool trust = !conf.force_all_checks && (s == controller::block_status::irreversible || s == controller::block_status::validated);
-         auto new_header_state = fork_db.add( b, trust );
+         auto new_header_state = fork_db.add( b, trust ); // 填充 fork_db
          emit( self.accepted_block_header, new_header_state );
          // on replay irreversible is not emitted by fork database, so emit it explicitly here
          if( s == controller::block_status::irreversible )
@@ -1046,10 +1063,11 @@ struct controller_impl {
       }
    }
 
+   // 处理可能的分叉
    void maybe_switch_forks( controller::block_status s = controller::block_status::complete ) {
       auto new_head = fork_db.head();
 
-      if( new_head->header.previous == head->id ) {
+      if( new_head->header.previous == head->id ) { // 如果 fork_db 的上一个块id与主链当前块id一致
          try {
             apply_block( new_head->block, s );
             fork_db.mark_in_current_chain( new_head, true );
@@ -1059,11 +1077,12 @@ struct controller_impl {
             fork_db.set_validity( new_head, false ); // Removes new_head from fork_db index, so no need to mark it as not in the current chain.
             throw;
          }
-      } else if( new_head->id != head->id ) {
+      } else if( new_head->id != head->id ) { // 如果不一致，则产生了软分叉
          ilog("switching forks from ${current_head_id} (block number ${current_head_num}) to ${new_head_id} (block number ${new_head_num})",
               ("current_head_id", head->id)("current_head_num", head->block_num)("new_head_id", new_head->id)("new_head_num", new_head->block_num) );
-         auto branches = fork_db.fetch_branch_from( new_head->id, head->id );
+         auto branches = fork_db.fetch_branch_from( new_head->id, head->id ); // 得到两条分支, 第一条是分叉链上的，第二条是主链上的
 
+         // 回滚掉主链上分叉的部分块
          for( auto itr = branches.second.begin(); itr != branches.second.end(); ++itr ) {
             fork_db.mark_in_current_chain( *itr , false );
             pop_block();
@@ -1071,6 +1090,7 @@ struct controller_impl {
          EOS_ASSERT( self.head_block_id() == branches.second.back()->header.previous, fork_database_exception,
                     "loss of sync between fork_db and chainbase during fork switch" ); // _should_ never fail
 
+          // 应用分叉链上的分叉部分的块
          for( auto ritr = branches.first.rbegin(); ritr != branches.first.rend(); ++ritr) {
             optional<fc::exception> except;
             try {
@@ -1369,7 +1389,7 @@ controller::~controller() {
    my->fork_db.close();
 }
 
-
+// [3 启动chain_plugin] 启动
 void controller::startup() {
 
    // ilog( "${c}", ("c",fc::json::to_pretty_string(cfg)) );
@@ -1379,7 +1399,7 @@ void controller::startup() {
    if( !my->head ) {
       elog( "No head block in fork db, perhaps we need to replay" );
    }
-   my->init();
+   my->init(); // 初始化
 }
 
 chainbase::database& controller::db()const { return my->db; }

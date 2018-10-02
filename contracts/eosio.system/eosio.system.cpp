@@ -45,7 +45,7 @@ namespace eosiosystem {
       return dp;
    }
 
-
+   // 每次执行完，同步_gstate给_global以保存到数据库
    system_contract::~system_contract() {
       //print( "destruct system\n" );
       _global.set( _gstate, _self );
@@ -107,7 +107,7 @@ namespace eosiosystem {
       eosio_assert( newname != 0, "the empty name is not a valid account name to bid on" );
       eosio_assert( (newname & 0xFull) == 0, "13 character names are not valid account names to bid on" );
       eosio_assert( (newname & 0x1F0ull) == 0, "accounts with 12 character names and no dots can be created without bidding required" );
-      eosio_assert( !is_account( newname ), "account already exists" );
+      eosio_assert( !is_account( newname ), "account already exists" ); // 检查账户是否已经被领取注册
       eosio_assert( bid.symbol == asset().symbol, "asset must be system token" );
       eosio_assert( bid.amount > 0, "insufficient bid" );
 
@@ -152,7 +152,7 @@ namespace eosiosystem {
     *  who can create accounts with the creator's name as a suffix.
     *
     */
-    // 账户被创建之后才调用这个。可以在这里申领竞拍账户。成功竞拍到账户A后，用户也自动获取了以.A为后缀的所有账户
+    // 账户被创建之后才调用这个。也可以创建竞拍账户，成功竞拍到账户A后，用户也自动获取了以.A为后缀的所有账户，其他人不能再竞拍A域名
    void native::newaccount( account_name     creator,
                             account_name     newact
                             /*  no need to parse authorities
@@ -169,7 +169,7 @@ namespace eosiosystem {
          }
          if( has_dot ) { // or is less than 12 characters
             auto suffix = eosio::name_suffix(newact);
-            if( suffix == newact ) {
+            if( suffix == newact ) {  // 如果是创建 com 账户
                name_bid_table bids(_self,_self);
                auto current = bids.find( newact );
                eosio_assert( current != bids.end(), "no active bid for name" );
@@ -177,7 +177,7 @@ namespace eosiosystem {
                eosio_assert( current->high_bid < 0, "auction for name is not closed yet" ); // 检查这个域名竞拍是否已经结束。结束了 high_bid 会是 -high_bid
                bids.erase( current );
             } else {
-               eosio_assert( creator == suffix, "only suffix may create this account" );
+               eosio_assert( creator == suffix, "only suffix may create this account" ); // 只有 com 账户能创建 abc.com 账户
             }
          }
       }

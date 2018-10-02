@@ -139,6 +139,7 @@ namespace config {
  * Makes sure all keys are unique and sorted and all account permissions are unique and sorted and that authority can
  * be satisfied
  */
+ // 校验权限weight是否满足threshold
 template<typename Authority>
 inline bool validate( const Authority& auth ) {
    decltype(auth.threshold) total_weight = 0;

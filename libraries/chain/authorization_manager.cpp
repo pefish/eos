@@ -25,6 +25,7 @@ namespace eosio { namespace chain {
    }
 
    void authorization_manager::initialize_database() {
+       // 创建 permission_object 表
       _db.create<permission_object>([](auto&){}); /// reserve perm 0 (used else where)
    }
 

@@ -47,13 +47,13 @@ namespace eosiosystem {
       if( timestamp.slot - _gstate.last_producer_schedule_update.slot > 120 ) {
          update_elected_producers( timestamp );  // 每两分钟更新21个区块生产者
 
-         if( (timestamp.slot - _gstate.last_name_close.slot) > blocks_per_day ) { // 每天只关闭一个竞拍域名
+         if( (timestamp.slot - _gstate.last_name_close.slot) > blocks_per_day ) { // 每天最多只关闭一个竞拍域名
             name_bid_table bids(_self,_self);
             auto idx = bids.get_index<N(highbid)>();
-            auto highest = idx.begin();
+            auto highest = idx.begin();  // 优先关闭竞拍价格最高的域名
             if( highest != idx.end() &&
                 highest->high_bid > 0 &&
-                highest->last_bid_time < (current_time() - useconds_per_day) &&
+                highest->last_bid_time < (current_time() - useconds_per_day) && // 要求24小时内没有其他人竞拍这个域名。如果这个域名一直有人竞拍，则后面的域名都不能停止竞拍
                 _gstate.thresh_activated_stake_time > 0 &&
                 (current_time() - _gstate.thresh_activated_stake_time) > 14 * useconds_per_day ) {  // 网络激活时间必须大于14天
                    _gstate.last_name_close = timestamp;  // 标记上次某个域名竞拍结束的时间

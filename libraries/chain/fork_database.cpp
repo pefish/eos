@@ -49,14 +49,15 @@ namespace eosio { namespace chain {
    };
 
 
+   // fork_db 构造函数
    fork_database::fork_database( const fc::path& data_dir ):my( new fork_database_impl() ) {
       my->datadir = data_dir;
 
-      if (!fc::is_directory(my->datadir))
+      if (!fc::is_directory(my->datadir))  // datadir 不存在则创建
          fc::create_directories(my->datadir);
 
       auto fork_db_dat = my->datadir / config::forkdb_filename;
-      if( fc::exists( fork_db_dat ) ) {
+      if( fc::exists( fork_db_dat ) ) { // 如果存在 fork_db_dat 文件的话
          string content;
          fc::read_file_contents( fork_db_dat, content );
 
@@ -65,14 +66,14 @@ namespace eosio { namespace chain {
          for( uint32_t i = 0, n = size.value; i < n; ++i ) {
             block_state s;
             fc::raw::unpack( ds, s );
-            set( std::make_shared<block_state>( move( s ) ) );
+            set( std::make_shared<block_state>( move( s ) ) ); // 插入索引
          }
          block_id_type head_id;
          fc::raw::unpack( ds, head_id );
 
-         my->head = get_block( head_id );
+         my->head = get_block( head_id );  // 设置 head
 
-         fc::remove( fork_db_dat );
+         fc::remove( fork_db_dat ); // 删除 fork_db_dat 文件
       }
    }
 
@@ -161,6 +162,7 @@ namespace eosio { namespace chain {
     *  Given two head blocks, return two branches of the fork graph that
     *  end with a common ancestor (same prior block)
     */
+    // 根据主链和fork链的id，得到两条分支
    pair< branch_type, branch_type >  fork_database::fetch_branch_from( const block_id_type& first,
                                                                        const block_id_type& second )const {
       pair<branch_type,branch_type> result;
@@ -229,6 +231,7 @@ namespace eosio { namespace chain {
       }
    }
 
+   // 将分叉的块标记到主链上
    void fork_database::mark_in_current_chain( const block_state_ptr& h, bool in_current_chain ) {
       if( h->in_current_chain == in_current_chain )
          return;
