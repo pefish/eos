@@ -133,8 +133,8 @@ namespace eosio {
       tcp::endpoint                    listen_endpoint;
       string                           p2p_address;
       uint32_t                         max_client_count = 0;
-      uint32_t                         max_nodes_per_host = 1;
-      uint32_t                         num_clients = 0;
+      uint32_t                         max_nodes_per_host = 1;  // 每个主机最多只能启动一个节点
+      uint32_t                         num_clients = 0; // 连接到本节点的节点数量
 
       vector<string>                   supplied_peers;
       vector<chain::public_key_type>   allowed_peers; ///< peer keys allowed to connect
@@ -1961,6 +1961,7 @@ namespace eosio {
          } );
    }
 
+   // 开启连接，接收消息
    bool net_plugin_impl::start_session( connection_ptr con ) {
       boost::asio::ip::tcp::no_delay nodelay( true );
       boost::system::error_code ec;
@@ -1974,7 +1975,7 @@ namespace eosio {
       }
       else {
          start_read_message( con );
-         ++started_sessions;
+         ++started_sessions; // 记录已经开启的session
          return true;
          // for now, we can just use the application main loop.
          //     con->readloop_complete  = bf::async( [=](){ read_loop( con ); } );
@@ -1986,20 +1987,21 @@ namespace eosio {
    void net_plugin_impl::start_listen_loop( ) {
       auto socket = std::make_shared<tcp::socket>( std::ref( app().get_io_service() ) );
       acceptor->async_accept( *socket, [socket,this]( boost::system::error_code ec ) {
-            if( !ec ) {
+            if( !ec ) { // 如果没出错
                uint32_t visitors = 0;
-               uint32_t from_addr = 0;
-               auto paddr = socket->remote_endpoint(ec).address();
+               uint32_t from_addr = 0; // 表示远程节点第几次连接上我
+               auto paddr = socket->remote_endpoint(ec).address(); // 获取连接过来的节点的ip
                if (ec) {
                   fc_elog(logger,"Error getting remote endpoint: ${m}",("m", ec.message()));
                }
                else {
+                   // 统计visitors和from_addr
                   for (auto &conn : connections) {
                      if(conn->socket->is_open()) {
                         if (conn->peer_addr.empty()) {
                            visitors++;
                            boost::system::error_code ec;
-                           if (paddr == conn->socket->remote_endpoint(ec).address()) {
+                           if (paddr == conn->socket->remote_endpoint(ec).address()) { // 已经连接过
                               from_addr++;
                            }
                         }
@@ -2009,11 +2011,12 @@ namespace eosio {
                      ilog ("checking max client, visitors = ${v} num clients ${n}",("v",visitors)("n",num_clients));
                      num_clients = visitors;
                   }
+                  // 首次连接且本节点满足最大客户端连接数
                   if( from_addr < max_nodes_per_host && (max_client_count == 0 || num_clients < max_client_count )) {
-                     ++num_clients;
+                     ++num_clients; // 客户端连接数量+1
                      connection_ptr c = std::make_shared<connection>( socket );
-                     connections.insert( c );
-                     start_session( c );
+                     connections.insert( c ); // 存储连接
+                     start_session( c ); // 开始接受消息
 
                   }
                   else {
@@ -2043,10 +2046,11 @@ namespace eosio {
                      return;
                }
             }
-            start_listen_loop();
+            start_listen_loop(); // 嵌套调用
          });
    }
 
+   // 开始读取session的消息
    void net_plugin_impl::start_read_message( connection_ptr conn ) {
 
       try {
@@ -2057,7 +2061,7 @@ namespace eosio {
 
          std::size_t minimum_read = conn->outstanding_read_bytes ? *conn->outstanding_read_bytes : message_header_size;
 
-         if (use_socket_read_watermark) {
+         if (use_socket_read_watermark) { // 配置文件中指定的
             const size_t max_socket_read_watermark = 4096;
             std::size_t socket_read_watermark = std::min<std::size_t>(minimum_read, max_socket_read_watermark);
             boost::asio::socket_base::receive_low_watermark read_watermark_opt(socket_read_watermark);
@@ -2126,7 +2130,7 @@ namespace eosio {
                            }
                         }
                      }
-                     start_read_message(conn);
+                     start_read_message(conn); // 嵌套调用
                   } else {
                      auto pname = conn->peer_name();
                      if (ec.value() != boost::asio::error::eof) {
@@ -3010,11 +3014,12 @@ namespace eosio {
              ("port", my->listen_endpoint.port()));
            throw e;
          }
-         my->acceptor->listen();
+         my->acceptor->listen(); // 开启tcp监听
          ilog("starting listener, max clients is ${mc}",("mc",my->max_client_count));
-         my->start_listen_loop();
+         my->start_listen_loop(); // 开始循环监听连接
       }
       chain::controller&cc = my->chain_plug->chain();
+      // 注册监听器。类似于event.on。cc.accepted_block_header(args)类似于event.emit(args)
       {
          cc.accepted_block_header.connect( boost::bind(&net_plugin_impl::accepted_block_header, my.get(), _1));
          cc.accepted_block.connect(  boost::bind(&net_plugin_impl::accepted_block, my.get(), _1));

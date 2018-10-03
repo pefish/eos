@@ -68,6 +68,7 @@ namespace eosio {
         void plugin_shutdown();
 
         void add_handler(const string& url, const url_handler&);
+        // 添加路由到http_plugin。此方法由其他api插件调用
         void add_api(const api_description& api) {
            for (const auto& call : api) 
               add_handler(call.first, call.second);

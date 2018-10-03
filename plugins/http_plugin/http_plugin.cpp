@@ -194,6 +194,7 @@ namespace eosio {
             }
          }
 
+         // 处理http请求的方法
          template<class T>
          void handle_http_request(typename websocketpp::server<detail::asio_with_stub_log<T>>::connection_ptr con) {
             try {
@@ -229,7 +230,7 @@ namespace eosio {
                con->append_header( "Content-type", "application/json" );
                auto body = con->get_request_body();
                auto resource = con->get_uri()->get_resource();
-               auto handler_itr = url_handlers.find( resource );
+               auto handler_itr = url_handlers.find( resource ); // 查找路由
                if( handler_itr != url_handlers.end()) {
                   con->defer_http_response();
                   handler_itr->second( resource, body, [con]( auto code, auto&& body ) {
@@ -250,6 +251,7 @@ namespace eosio {
             }
          }
 
+         // 创建http服务器
          template<class T>
          void create_server_for_endpoint(const tcp::endpoint& ep, websocketpp::server<detail::asio_with_stub_log<T>>& ws) {
             try {
@@ -325,6 +327,7 @@ namespace eosio {
             ;
    }
 
+   // 加载参数
    void http_plugin::plugin_initialize(const variables_map& options) {
       try {
          my->validate_host = options.at("http-validate-host").as<bool>();
@@ -333,6 +336,7 @@ namespace eosio {
             my->valid_hosts.insert(aliases.begin(), aliases.end());
          }
 
+         // 设置监听ip以及端口
          tcp::resolver resolver( app().get_io_service());
          if( options.count( "http-server-address" ) && options.at( "http-server-address" ).as<string>().length()) {
             string lipstr = options.at( "http-server-address" ).as<string>();
@@ -399,8 +403,8 @@ namespace eosio {
             my->create_server_for_endpoint(*my->listen_endpoint, my->server);
 
             ilog("start listening for http requests");
-            my->server.listen(*my->listen_endpoint);
-            my->server.start_accept();
+            my->server.listen(*my->listen_endpoint); // 监听
+            my->server.start_accept(); // 启动
          } catch ( const fc::exception& e ){
             elog( "http service failed to start: ${e}", ("e",e.to_detail_string()));
             throw;
