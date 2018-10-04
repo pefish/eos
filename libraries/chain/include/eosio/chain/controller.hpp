@@ -36,7 +36,7 @@ namespace eosio { namespace chain {
    enum class db_read_mode {
       SPECULATIVE,
       HEAD,
-      READ_ONLY,
+      READ_ONLY,  // 只读模式
       IRREVERSIBLE
    };
 

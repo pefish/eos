@@ -1541,6 +1541,7 @@ time_point controller::pending_block_time()const {
    return my->pending->_pending_block_state->header.timestamp;
 }
 
+// 获取当前不可回滚的高度
 uint32_t controller::last_irreversible_block_num() const {
    return std::max(my->head->bft_irreversible_blocknum, my->head->dpos_irreversible_blocknum);
 }
@@ -1721,6 +1722,7 @@ chain_id_type controller::get_chain_id()const {
    return my->chain_id;
 }
 
+// 获取节点的读取模式
 db_read_mode controller::get_read_mode()const {
    return my->read_mode;
 }

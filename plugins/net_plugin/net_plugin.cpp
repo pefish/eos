@@ -1600,7 +1600,7 @@ namespace eosio {
    }
 
    //------------------------------------------------------------------------
-
+    // 向所有相邻节点广播块
    void dispatch_manager::bcast_block (const signed_block &bsum) {
       std::set<connection_ptr> skips;
       auto range = received_blocks.equal_range(bsum.id());
@@ -1955,7 +1955,7 @@ namespace eosio {
                   elog( "connection failed to ${peer}: ${error}",
                         ( "peer", c->peer_name())("error",err.message()));
                   c->connecting = false;
-                  my_impl->close(c);
+                  my_impl->close(c); // 连接失败，关闭连接
                }
             }
          } );
@@ -2174,7 +2174,7 @@ namespace eosio {
       return count;
    }
 
-
+    // 向所有邻节点发送某消息
    template<typename VerifierFunc>
    void net_plugin_impl::send_all( const net_message &msg, VerifierFunc verify) {
       for( auto &c : connections) {
@@ -2581,6 +2581,7 @@ namespace eosio {
       }
    }
 
+   // 开启连接管理定时器
    void net_plugin_impl::start_conn_timer(boost::asio::steady_timer::duration du, std::weak_ptr<connection> from_connection) {
       connector_check->expires_from_now( du);
       connector_check->async_wait( [this, from_connection](boost::system::error_code ec) {
@@ -2594,6 +2595,7 @@ namespace eosio {
          });
    }
 
+   // 开启 定时清理过期交易 的定时器
    void net_plugin_impl::start_txn_timer() {
       transaction_check->expires_from_now( txn_exp_period);
       transaction_check->async_wait( [this](boost::system::error_code ec) {
@@ -2622,13 +2624,17 @@ namespace eosio {
          });
    }
 
+   // 开启监视器
    void net_plugin_impl::start_monitors() {
+       // 初始化两个定时器
       connector_check.reset(new boost::asio::steady_timer( app().get_io_service()));
       transaction_check.reset(new boost::asio::steady_timer( app().get_io_service()));
+      // 开启两个定时器
       start_conn_timer(connector_period, std::weak_ptr<connection>());
       start_txn_timer();
    }
 
+   // 清理过期交易
    void net_plugin_impl::expire_txns() {
       start_txn_timer( );
       auto &old = local_txns.get<by_expiry>();
@@ -2650,6 +2656,7 @@ namespace eosio {
       }
    }
 
+   // 连接监听器。保证所有连接不会断掉。不定期的清理连接
    void net_plugin_impl::connection_monitor(std::weak_ptr<connection> from_connection) {
       auto max_time = fc::time_point::now();
       max_time += fc::milliseconds(max_cleanup_time_ms);
@@ -2663,10 +2670,10 @@ namespace eosio {
          }
          if( !(*it)->socket->is_open() && !(*it)->connecting) {
             if( (*it)->peer_addr.length() > 0) {
-               connect(*it);
+               connect(*it); // 重新连上
             }
             else {
-               it = connections.erase(it);
+               it = connections.erase(it); // 清理掉连接
                continue;
             }
          }
@@ -3019,7 +3026,7 @@ namespace eosio {
          my->start_listen_loop(); // 开始循环监听连接
       }
       chain::controller&cc = my->chain_plug->chain();
-      // 注册监听器。类似于event.on。cc.accepted_block_header(args)类似于event.emit(args)
+      // 注册监听器。类似于event.on。cc.accepted_block_header(args)类似于event.emit(args), 触发net_plugin_impl::accepted_block_header方法执行
       {
          cc.accepted_block_header.connect( boost::bind(&net_plugin_impl::accepted_block_header, my.get(), _1));
          cc.accepted_block.connect(  boost::bind(&net_plugin_impl::accepted_block, my.get(), _1));
@@ -3028,16 +3035,18 @@ namespace eosio {
          cc.applied_transaction.connect( boost::bind(&net_plugin_impl::applied_transaction, my.get(), _1));
          cc.accepted_confirmation.connect( boost::bind(&net_plugin_impl::accepted_confirmation, my.get(), _1));
       }
-
+      // 同样是注册监听器。channel是对signal2的封装
       my->incoming_transaction_ack_subscription = app().get_channel<channels::transaction_ack>().subscribe(boost::bind(&net_plugin_impl::transaction_ack, my.get(), _1));
 
+       // 如果节点是只读模式(由配置文件指定，默认是SPECULATIVE模式)，则阻止其他节点连接本节点
       if( cc.get_read_mode() == chain::db_read_mode::READ_ONLY ) {
          my->max_nodes_per_host = 0;
          ilog( "node in read-only mode setting max_nodes_per_host to 0 to prevent connections" );
       }
 
-      my->start_monitors();
+      my->start_monitors(); // 启动 连接管理定时器 以及 过期交易清理定时器
 
+       // 连接用户指定的 p2p-peer-address
       for( auto seed_node : my->supplied_peers ) {
          connect( seed_node );
       }
@@ -3074,7 +3083,9 @@ namespace eosio {
    /**
     *  Used to trigger a new connection from RPC API
     */
+    // 连接到指定host
    string net_plugin::connect( const string& host ) {
+       // 判断是否已经连接
       if( my->find_connection( host ) )
          return "already connected";
 
@@ -3113,6 +3124,8 @@ namespace eosio {
       }
       return result;
    }
+
+   // 查找 连接上host 的conn实例
    connection_ptr net_plugin_impl::find_connection( string host )const {
       for( const auto& c : connections )
          if( c->peer_addr == host ) return c;
