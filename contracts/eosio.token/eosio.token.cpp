@@ -73,8 +73,8 @@ void token::transfer( account_name from,
     stats statstable( _self, sym );
     const auto& st = statstable.get( sym );
 
-    require_recipient( from );
-    require_recipient( to );
+    require_recipient( from ); // 如果from是合约的话，这里会调用from合约，from为receiver，code不变，action也不变
+    require_recipient( to ); // 如果to是合约的话，这里会调用to合约，to为receiver，code不变，action也不变
 
     eosio_assert( quantity.is_valid(), "invalid quantity" );
     eosio_assert( quantity.amount > 0, "must transfer positive quantity" );

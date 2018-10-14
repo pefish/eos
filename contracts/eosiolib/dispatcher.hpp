@@ -62,6 +62,7 @@ namespace eosio {
     * @param func - The action handler
     * @return true  
     */
+    // 合约中调用这个时，方法的参数是此交易的action中的数据
    template<typename T, typename Q, typename... Args>
    bool execute_action( T* obj, void (Q::*func)(Args...)  ) {
       size_t size = action_data_size();
