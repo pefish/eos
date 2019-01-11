@@ -87,7 +87,7 @@ flat_set<public_key_type> transaction::get_signature_keys( const vector<signatur
    using boost::adaptors::transformed;
 
    constexpr size_t recovery_cache_size = 1000;
-   static recovery_cache_type recovery_cache;
+   static thread_local recovery_cache_type recovery_cache;
    const digest_type digest = sig_digest(chain_id, cfd);
 
    flat_set<public_key_type> recovered_pub_keys;
@@ -296,6 +296,12 @@ transaction_id_type packed_transaction::id()const
 {
    local_unpack();
    return get_transaction().id();
+}
+
+transaction_id_type packed_transaction::get_uncached_id()const
+{
+   const auto raw = get_raw_transaction();
+   return fc::raw::unpack<transaction>( raw ).id();
 }
 
 void packed_transaction::local_unpack()const

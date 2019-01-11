@@ -306,7 +306,7 @@ namespace eosio {
 
 
         int next_session_id()const {
-           static int session_count = 0;
+           static std::atomic<int> session_count(0);
            return ++session_count;
         }
 
@@ -530,9 +530,14 @@ namespace eosio {
                  _block_status.insert( block_status(id, false, false) );
               }
            }
+        }
 
+        void on_accepted_block( const block_state_ptr& s ) {
+           verify_strand_in_this_thread(_strand, __func__, __LINE__);
            //idump((_block_status.size())(_transaction_status.size()));
            //ilog( "accepted block ${n}", ("n",s->block_num) );
+
+           const auto& id = s->id;
 
            _local_head_block_id = id;
            _local_head_block_num = block_header::num_from_id(id);
@@ -549,7 +554,9 @@ namespace eosio {
             */
            for( const auto& receipt : s->block->transactions ) {
               if( receipt.trx.which() == 1 ) {
-                 const auto tid = receipt.trx.get<packed_transaction>().id();
+                 const auto& pt = receipt.trx.get<packed_transaction>();
+                 // get id via get_uncached_id() as packed_transaction.id() mutates internal transaction state
+                 const auto& tid = pt.get_uncached_id();
                  auto itr = _transaction_status.find( tid );
                  if( itr != _transaction_status.end() )
                     _transaction_status.erase(itr);
@@ -781,7 +788,7 @@ namespace eosio {
 
             /// if something changed, the next block doesn't link to the last
             /// block we sent, local chain must have switched forks
-            if( nextblock->previous != _last_sent_block_id ) {
+            if( nextblock->previous != _last_sent_block_id && _last_sent_block_id != block_id_type() ) {
                 if( !is_known_by_peer( nextblock->previous ) ) {
                   _last_sent_block_id  = _local_lib_id;
                   _last_sent_block_num = _local_lib;
@@ -1006,7 +1013,9 @@ namespace eosio {
         void mark_block_transactions_known_by_peer( const signed_block_ptr& b ) {
            for( const auto& receipt : b->transactions ) {
               if( receipt.trx.which() == 1 ) {
-                 auto id = receipt.trx.get<packed_transaction>().id();
+                 const auto& pt = receipt.trx.get<packed_transaction>();
+                 // get id via get_uncached_id() as packed_transaction.id() mutates internal transaction state
+                 const auto& id = pt.get_uncached_id();
                  mark_transaction_known_by_peer(id);
               }
            }
@@ -1032,24 +1041,7 @@ namespace eosio {
            return false;
         }
 
-        void on( const packed_transaction_ptr& p ) {
-           peer_ilog(this, "received packed_transaction_ptr");
-           if (!p) {
-              peer_elog(this, "bad packed_transaction_ptr : null pointer");
-              EOS_THROW(transaction_exception, "bad transaction");
-           }
-           if( app().get_plugin<chain_plugin>().chain().get_read_mode() == chain::db_read_mode::READ_ONLY )
-              return;
-
-           auto id = p->id();
-          // ilog( "recv trx ${n}", ("n", id) );
-           if( p->expiration() < fc::time_point::now() ) return;
-
-           if( mark_transaction_known_by_peer( id ) )
-              return;
-
-           app().get_channel<incoming::channels::transaction>().publish(p);
-        }
+        void on( const packed_transaction_ptr& p );
 
         void on_write( boost::system::error_code ec, std::size_t bytes_transferred ) {
            boost::ignore_unused(bytes_transferred);
@@ -1204,6 +1196,18 @@ namespace eosio {
             for_each_session( [s]( auto ses ){ ses->on_new_lib( s ); } );
          }
 
+         /**
+          * Notify all active connections of the new accepted block so
+          * they can relay it. This method also pre-packages the block
+          * as a packed bnet_message so the connections can simply relay
+          * it on.
+          */
+         void on_accepted_block( block_state_ptr s ) {
+            _ioc->post( [s,this] { /// post this to the thread pool because packing can be intensive
+               for_each_session( [s]( auto ses ){ ses->on_accepted_block( s ); } );
+            });
+         }
+
          void on_accepted_block_header( block_state_ptr s ) {
             _ioc->post( [s,this] { /// post this to the thread pool because packing can be intensive
                for_each_session( [s]( auto ses ){ ses->on_accepted_block_header( s ); } );
@@ -1349,6 +1353,9 @@ namespace eosio {
 
       wlog( "bnet startup " );
 
+      auto& chain = app().get_plugin<chain_plugin>().chain();
+      FC_ASSERT ( chain.get_read_mode() != chain::db_read_mode::IRREVERSIBLE, "bnet is not compatible with \"irreversible\" read_mode");
+
       my->_on_appled_trx_handle = app().get_channel<channels::accepted_transaction>()
                                 .subscribe( [this]( transaction_metadata_ptr t ){
                                        my->on_accepted_transaction(t);
@@ -1358,6 +1365,11 @@ namespace eosio {
                                 .subscribe( [this]( block_state_ptr s ){
                                        my->on_irreversible_block(s);
                                 });
+
+      my->_on_accepted_block_handle = app().get_channel<channels::accepted_block>()
+                                         .subscribe( [this]( block_state_ptr s ){
+                                                my->on_accepted_block(s);
+                                         });
 
       my->_on_accepted_block_header_handle = app().get_channel<channels::accepted_block_header>()
                                          .subscribe( [this]( block_state_ptr s ){
@@ -1371,8 +1383,10 @@ namespace eosio {
 
 
       if( app().get_plugin<chain_plugin>().chain().get_read_mode() == chain::db_read_mode::READ_ONLY ) {
-         my->_request_trx = false;
-         ilog( "setting bnet-no-trx to true since in read-only mode" );
+         if (my->_request_trx) {
+            my->_request_trx = false;
+            ilog( "forced bnet-no-trx to true since in read-only mode" );
+         }
       }
 
       const auto address = boost::asio::ip::make_address( my->_bnet_endpoint_address );
@@ -1526,4 +1540,24 @@ namespace eosio {
 
    }
 
+   void session::on( const packed_transaction_ptr& p ) {
+      peer_ilog(this, "received packed_transaction_ptr");
+      if (!p) {
+        peer_elog(this, "bad packed_transaction_ptr : null pointer");
+        EOS_THROW(transaction_exception, "bad transaction");
+      }
+      if( !_net_plugin->_request_trx )
+        return;
+
+      // ilog( "recv trx ${n}", ("n", id) );
+      if( p->expiration() < fc::time_point::now() ) return;
+
+      // get id via get_uncached_id() as packed_transaction.id() mutates internal transaction state
+      const auto& id = p->get_uncached_id();
+
+      if( mark_transaction_known_by_peer( id ) )
+        return;
+
+      app().get_channel<incoming::channels::transaction>().publish(p);
+   }
 } /// namespace eosio

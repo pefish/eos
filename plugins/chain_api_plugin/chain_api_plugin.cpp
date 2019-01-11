@@ -37,7 +37,7 @@ struct async_result_visitor : public fc::visitor<std::string> {
 
 #define CALL(api_name, api_handle, api_namespace, call_name, http_response_code) \
 {std::string("/v1/" #api_name "/" #call_name), \
-   [this, api_handle](string, string body, url_response_callback cb) mutable { \
+   [api_handle](string, string body, url_response_callback cb) mutable { \
           api_handle.validate(); \
           try { \
              if (body.empty()) body = "{}"; \
@@ -50,7 +50,7 @@ struct async_result_visitor : public fc::visitor<std::string> {
 
 #define CALL_ASYNC(api_name, api_handle, api_namespace, call_name, call_result, http_response_code) \
 {std::string("/v1/" #api_name "/" #call_name), \
-   [this, api_handle](string, string body, url_response_callback cb) mutable { \
+   [api_handle](string, string body, url_response_callback cb) mutable { \
       if (body.empty()) body = "{}"; \
       api_handle.validate(); \
       api_handle.call_name(fc::json::from_string(body).as<api_namespace::call_name ## _params>(),\
@@ -79,27 +79,33 @@ void chain_api_plugin::plugin_startup() {
    auto ro_api = app().get_plugin<chain_plugin>().get_read_only_api();
    auto rw_api = app().get_plugin<chain_plugin>().get_read_write_api();
 
-   app().get_plugin<http_plugin>().add_api({
-      CHAIN_RO_CALL(get_info, 200l),  // /v1/chain/get_info
-      CHAIN_RO_CALL(get_block, 200),  // /v1/chain/get_block
-      CHAIN_RO_CALL(get_block_header_state, 200),  // /v1/chain/get_block_header_state
-      CHAIN_RO_CALL(get_account, 200),  // /v1/chain/get_account
-      CHAIN_RO_CALL(get_code, 200),  // /v1/chain/get_code
-      CHAIN_RO_CALL(get_abi, 200),  // /v1/chain/get_abi
-      CHAIN_RO_CALL(get_raw_code_and_abi, 200),  // /v1/chain/get_raw_code_and_abi
-      CHAIN_RO_CALL(get_table_rows, 200),  // /v1/chain/get_table_rows
-      CHAIN_RO_CALL(get_currency_balance, 200),  // /v1/chain/get_currency_balance
-      CHAIN_RO_CALL(get_currency_stats, 200),  // /v1/chain/get_currency_stats
-      CHAIN_RO_CALL(get_producers, 200),  // /v1/chain/get_producers
-      CHAIN_RO_CALL(get_producer_schedule, 200),  // /v1/chain/get_producer_schedule
-      CHAIN_RO_CALL(get_scheduled_transactions, 200),  // /v1/chain/get_scheduled_transactions
-      CHAIN_RO_CALL(abi_json_to_bin, 200),  // /v1/chain/abi_json_to_bin
-      CHAIN_RO_CALL(abi_bin_to_json, 200),  // /v1/chain/abi_bin_to_json
-      CHAIN_RO_CALL(get_required_keys, 200),  // /v1/chain/get_required_keys
-      CHAIN_RO_CALL(get_transaction_id, 200),  // /v1/chain/get_transaction_id
-      CHAIN_RW_CALL_ASYNC(push_block, chain_apis::read_write::push_block_results, 202),  // /v1/chain/push_block
-      CHAIN_RW_CALL_ASYNC(push_transaction, chain_apis::read_write::push_transaction_results, 202),  // /v1/chain/push_transaction
-      CHAIN_RW_CALL_ASYNC(push_transactions, chain_apis::read_write::push_transactions_results, 202)  // /v1/chain/push_transactions
+   auto& _http_plugin = app().get_plugin<http_plugin>();
+   ro_api.set_shorten_abi_errors( !_http_plugin.verbose_errors() );
+
+   _http_plugin.add_api({
+      CHAIN_RO_CALL(get_info, 200l), // /v1/chain/get_info
+      CHAIN_RO_CALL(get_block, 200), // /v1/chain/get_block
+      CHAIN_RO_CALL(get_block_header_state, 200), // /v1/chain/get_block_header_state
+      CHAIN_RO_CALL(get_account, 200), // /v1/chain/get_account
+      CHAIN_RO_CALL(get_code, 200), // /v1/chain/get_code
+      CHAIN_RO_CALL(get_code_hash, 200),
+      CHAIN_RO_CALL(get_abi, 200), // /v1/chain/get_abi
+      CHAIN_RO_CALL(get_raw_code_and_abi, 200), // /v1/chain/get_raw_code_and_abi
+      CHAIN_RO_CALL(get_raw_abi, 200),
+      CHAIN_RO_CALL(get_table_rows, 200), // /v1/chain/get_table_rows
+      CHAIN_RO_CALL(get_table_by_scope, 200),
+      CHAIN_RO_CALL(get_currency_balance, 200), // /v1/chain/get_currency_balance
+      CHAIN_RO_CALL(get_currency_stats, 200), // /v1/chain/get_currency_stats
+      CHAIN_RO_CALL(get_producers, 200), // /v1/chain/get_producers
+      CHAIN_RO_CALL(get_producer_schedule, 200), // /v1/chain/get_producer_schedule
+      CHAIN_RO_CALL(get_scheduled_transactions, 200), // /v1/chain/get_scheduled_transactions
+      CHAIN_RO_CALL(abi_json_to_bin, 200), // /v1/chain/abi_json_to_bin
+      CHAIN_RO_CALL(abi_bin_to_json, 200), // /v1/chain/abi_bin_to_json
+      CHAIN_RO_CALL(get_required_keys, 200), // /v1/chain/get_required_keys
+      CHAIN_RO_CALL(get_transaction_id, 200), // /v1/chain/get_transaction_id
+      CHAIN_RW_CALL_ASYNC(push_block, chain_apis::read_write::push_block_results, 202), // /v1/chain/push_block
+      CHAIN_RW_CALL_ASYNC(push_transaction, chain_apis::read_write::push_transaction_results, 202), // /v1/chain/push_transaction
+      CHAIN_RW_CALL_ASYNC(push_transactions, chain_apis::read_write::push_transactions_results, 202) // /v1/chain/push_transactions
    });
 }
 

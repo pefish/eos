@@ -6,10 +6,8 @@
 
 #include <eosio/chain_plugin/chain_plugin.hpp>  // include这个插件就注册了插件
 #include <eosio/http_plugin/http_plugin.hpp>
-#include <eosio/history_plugin/history_plugin.hpp>
 #include <eosio/net_plugin/net_plugin.hpp>
 #include <eosio/producer_plugin/producer_plugin.hpp>
-#include <eosio/utilities/common.hpp>
 
 #include <fc/log/logger_config.hpp>
 #include <fc/log/appender.hpp>
@@ -96,18 +94,24 @@ int main(int argc, char** argv)
 {
    try {
       app().set_version(eosio::nodeos::config::version); // [6 nodeos启动] 设置应用版本(外部传进来的环境变量)
-      app().register_plugin<history_plugin>(); // 注册 history_plugin 插件, 没有初始化(多余的，插件自己会调用这个方法)
 
       auto root = fc::app_path();
       app().set_default_data_dir(root / "eosio/nodeos/data" ); // 设置默认data目录
       app().set_default_config_dir(root / "eosio/nodeos/config" ); // 设置默认配置目录
+      http_plugin::set_defaults({
+         .address_config_prefix = "",
+         .default_unix_socket_path = "",
+         .default_http_port = 8888
+      });
       if(!app().initialize<chain_plugin, http_plugin, net_plugin, producer_plugin>(argc, argv)) // 初始化app对象. 默认启动插件 chain_plugin, http_plugin, net_plugin, producer_plugin
          return INITIALIZE_FAIL;
       initialize_logging(); // 初始化日志系统
       ilog("nodeos version ${ver}", ("ver", app().version_string()));
       ilog("eosio root is ${root}", ("root", root.string()));
+      ilog("nodeos using configuration file ${c}", ("c", app().full_config_file_path().string()));
+      ilog("nodeos data directory is ${d}", ("d", app().data_dir().string()));
       app().startup(); // 启动app
-      app().exec();  // 执行app
+      app().exec(); // 执行app
    } catch( const extract_genesis_state_exception& e ) {
       return EXTRACTED_GENESIS;
    } catch( const fixed_reversible_db_exception& e ) {
